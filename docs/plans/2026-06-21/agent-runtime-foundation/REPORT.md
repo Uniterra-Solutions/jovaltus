@@ -21,7 +21,7 @@ Needs Work
 | Req 2: Workspace File Reading | Partial | `packages/core/src/tools/read-tool.ts` L30-L61; `packages/core/src/tools/workspace.ts` L32-L50 | P1-001 |
 | Req 3: Read-Before-Write Safety | Partial | `packages/core/src/tools/write-tool.ts` L45-L103; `packages/core/src/tools/edit-tool.ts` L39-L107; `packages/core/src/tools/workspace.ts` L32-L50 | P1-001 |
 | Req 4: Controlled Bash Execution | Partial | `packages/core/src/tools/bash-tool.ts` L38-L95 | P1-002 |
-| Req 5: Composed Runtime Context | Complete | `packages/core/src/context/composer.ts` L47-L121; `packages/core/src/context/types.ts` L60-L88 | 0 |
+| Req 5: Composed Runtime Context | Complete | `packages/core/src/context/composer.ts` L86-L123; `packages/core/src/context/types.ts` L60-L88 | 0 |
 
 ---
 
@@ -41,13 +41,14 @@ Needs Work
 ### Previous Round - 2026-06-22
 
 - **Verdict**: Needs Work
-- **Key findings**: The prior report found one P1 defect: valid in-workspace paths beginning with a `..`-prefixed segment were rejected by workspace containment.
+- **Issues**: P0:0, P1:2, P2:0, P3:0
+- **Key findings**: The prior report found the same two P1 defects: valid in-workspace paths beginning with a `..`-prefixed segment were rejected, and out-of-range bash timeout values produced registry-level unknown errors.
 
 ---
 
 ## References
 
-- **Project context files**: `AGENTS.md`, `CLAUDE.md`, `package.json`, `packages/core/package.json`, `vitest.config.ts`
+- **Project context files**: `AGENTS.md`, `package.json`, `packages/core/package.json`, `vitest.config.ts`, `pnpm-workspace.yaml`
 - **Related documents**: `docs/plans/2026-06-21/agent-runtime-foundation/SPEC.md`, `docs/plans/2026-06-21/agent-runtime-foundation/DESIGN.md`, `docs/plans/2026-06-21/agent-runtime-foundation/CHECKLIST.md`
 - **Implementation files reviewed**: `packages/core/src/tools/types.ts`, `packages/core/src/tools/registry.ts`, `packages/core/src/tools/read-state.ts`, `packages/core/src/tools/workspace.ts`, `packages/core/src/tools/read-tool.ts`, `packages/core/src/tools/write-tool.ts`, `packages/core/src/tools/edit-tool.ts`, `packages/core/src/tools/bash-tool.ts`, `packages/core/src/context/types.ts`, `packages/core/src/context/composer.ts`, `packages/core/src/index.ts`
 - **Verification observed**: `pnpm test -- --run` passed 48 tests; `pnpm typecheck` passed.
