@@ -170,4 +170,76 @@ describe('createContextComposer', () => {
 
     expect(handlerCallCount).toBe(0);
   });
+
+  // -----------------------------------------------------------------------
+  // Test 4: optional provider rejection degrades gracefully
+  // -----------------------------------------------------------------------
+
+  it('returns tool descriptions when memory, skills, and MCP providers reject', async () => {
+    function rejectingProvider<T>(): ContextProvider<T> {
+      return {
+        type: 'rejecting',
+        get(): Promise<T> {
+          return Promise.reject(new Error('Provider unavailable'));
+        },
+      };
+    }
+
+    const registry = createToolRegistry();
+    registry.register(createReadTool());
+
+    const composer = createContextComposer({
+      memory: rejectingProvider<MemoryContext | null>(),
+      skills: rejectingProvider<SkillsContext | null>(),
+      mcps: rejectingProvider<MCPContext | null>(),
+    });
+
+    const context = await composer.compose({ toolRegistry: registry });
+
+    // Optional providers degrade to null
+    expect(context.memory).toBeNull();
+    expect(context.skills).toBeNull();
+    expect(context.mcps).toBeNull();
+
+    // Tool descriptions are still available
+    expect(context.tools.tools).toHaveLength(1);
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const readTool = context.tools.tools[0]!;
+    expect(readTool.id).toBe('file_read');
+    expect(readTool.name).toBe('Read');
+  });
+
+  // -----------------------------------------------------------------------
+  // Test 5: individual optional provider degradation
+  // -----------------------------------------------------------------------
+
+  it('degrades only the failing optional provider to null', async () => {
+    const composer = createContextComposer({
+      memory: {
+        type: 'memory',
+        get(): Promise<MemoryContext | null> {
+          return Promise.reject(new Error('memory unavailable'));
+        },
+      },
+      skills: {
+        type: 'skills',
+        get(): Promise<SkillsContext | null> {
+          return Promise.resolve({
+            items: [
+              { name: 'file-read', description: 'Ability to read files' },
+            ],
+          });
+        },
+      },
+    });
+
+    const context = await composer.compose();
+
+    expect(context.memory).toBeNull();
+    expect(context.skills).toEqual({
+      items: [{ name: 'file-read', description: 'Ability to read files' }],
+    });
+    expect(context.tools.tools).toEqual([]);
+    expect(context.mcps).toBeNull();
+  });
 });

@@ -52,3 +52,11 @@ Invalid parameters (empty file paths, non-string content, empty commands) are re
 **Evidence**: Each tool's handler checks required parameters before accessing the filesystem or process. (`packages/core/src/tools/read-tool.ts`, `write-tool.ts`, `edit-tool.ts`, `bash-tool.ts`)
 
 **Reason**: Fail-fast validation prevents wasted I/O and ensures consistent error responses for invalid input.
+
+## Workspace Path Containment
+
+File paths that resolve outside the configured workspace root are rejected with `INVALID_PARAMS` before any filesystem access. The shared helper `resolveInWorkspace` (`packages/core/src/tools/workspace.ts:32-51`) checks containment by comparing the resolved path's relative offset against the workspace root — any path starting with `..` is rejected.
+
+**Evidence**: `workspace.ts:40-48` (containment check), `read-tool.ts:42-45` (read guard), `write-tool.ts:69-72` (write guard), `edit-tool.ts:63-66` (edit guard).
+
+**Reason**: Workspace containment prevents path traversal attacks and ensures the agent operates within its declared workspace boundary. Rejecting before filesystem access avoids partial I/O effects on out-of-bounds paths.

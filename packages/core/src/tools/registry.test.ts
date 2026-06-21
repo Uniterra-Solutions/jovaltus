@@ -1,5 +1,5 @@
 import { mkdtempSync, writeFileSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -157,6 +157,42 @@ describe('Read tool', () => {
     expect(result.success).toBe(false);
     expect(result.error?.code).toBe('INVALID_PARAMS');
   });
+
+  it('rejects ../ traversal outside the workspace and does not mark read state', async () => {
+    const { root, context } = setup();
+    const registry = createToolRegistry();
+    registry.register(createReadTool());
+    const result = await registry.execute('file_read', { filePath: '../outside.txt' }, context);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe('INVALID_PARAMS');
+    expect(context.readState.hasRead(join(root, '..', 'outside.txt'))).toBe(false);
+  });
+
+  it('rejects an absolute path outside the workspace', async () => {
+    const { context } = setup();
+    const registry = createToolRegistry();
+    registry.register(createReadTool());
+    const result = await registry.execute('file_read', { filePath: '/etc/passwd' }, context);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe('INVALID_PARAMS');
+    expect(context.readState.hasRead('/etc/passwd')).toBe(false);
+  });
+
+  it('succeeds with an absolute path inside the workspace', async () => {
+    const { root, context } = setup();
+    const absFile = join(root, 'in-workspace.txt');
+    writeFileSync(absFile, 'hello');
+    context.readState.markRead(absFile);
+
+    const registry = createToolRegistry();
+    registry.register(createReadTool());
+    const result = await registry.execute('file_read', { filePath: absFile }, context);
+
+    expect(result.success).toBe(true);
+    expect(result.data).toBe('hello');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -228,6 +264,32 @@ describe('Write tool', () => {
     expect(result.success).toBe(false);
     expect(result.error?.code).toBe('INVALID_PARAMS');
   });
+
+  it('rejects ../ traversal outside the workspace and does not create the outside file', async () => {
+    const { root, context } = setup();
+    const outsideTarget = join(root, '..', 'write-escape.txt');
+    // Verify it does not exist yet
+    await expect(access(outsideTarget)).rejects.toThrow();
+
+    const registry = createToolRegistry();
+    registry.register(createWriteTool());
+    const result = await registry.execute('file_write', { filePath: '../write-escape.txt', content: 'should not be created' }, context);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe('INVALID_PARAMS');
+    // Verify the file was NOT created outside the workspace
+    await expect(access(outsideTarget)).rejects.toThrow();
+  });
+
+  it('rejects an absolute path outside the workspace', async () => {
+    const { context } = setup();
+    const registry = createToolRegistry();
+    registry.register(createWriteTool());
+    const result = await registry.execute('file_write', { filePath: '/tmp/jovaltus-escape-test.txt', content: 'nope' }, context);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe('INVALID_PARAMS');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -289,6 +351,17 @@ describe('Edit tool', () => {
     const registry = createToolRegistry();
     registry.register(createEditTool());
     const result = await registry.execute('file_edit', { filePath: 'x.txt', oldString: '', newString: 'b' }, context);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe('INVALID_PARAMS');
+  });
+
+  it('rejects outside-workspace paths before editing', async () => {
+    const { context } = setup();
+    const registry = createToolRegistry();
+    registry.register(createEditTool());
+    // Should fail with INVALID_PARAMS before even checking FILE_NOT_READ
+    const result = await registry.execute('file_edit', { filePath: '../outside-edit.txt', oldString: 'a', newString: 'b' }, context);
 
     expect(result.success).toBe(false);
     expect(result.error?.code).toBe('INVALID_PARAMS');

@@ -1,8 +1,9 @@
 import { access, mkdir, writeFile } from 'node:fs/promises';
-import { dirname, resolve as resolvePath } from 'node:path';
+import { dirname } from 'node:path';
 import { constants } from 'node:fs';
 
 import type { Tool, ToolResult } from './types.js';
+import { resolveInWorkspace } from './workspace.js';
 
 // ---------------------------------------------------------------------------
 // Write tool – full-file overwrite (or create).
@@ -65,7 +66,11 @@ const WRITE_TOOL: Tool = {
       };
     }
 
-    const resolved = resolvePath(context.workspaceRoot, filePath);
+    const wsResult = resolveInWorkspace(context.workspaceRoot, filePath);
+    if (!wsResult.ok) {
+      return { success: false, error: wsResult.error };
+    }
+    const resolved = wsResult.path;
 
     // Safety guard: existing files must have been read first.
     if (await fileExists(resolved)) {

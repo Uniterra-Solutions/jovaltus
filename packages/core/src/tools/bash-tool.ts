@@ -64,7 +64,7 @@ const BASH_TOOL: Tool = {
               success: false,
               error: {
                 code: 'EXECUTION_FAILED',
-                message: `Command exited with code ${error.code ?? 'unknown'}${output ? ':\n' + output : ''}`,
+                message: `Command exited with code ${String(error.code ?? 'unknown')}${output ? ':\n' + output : ''}`,
                 details: {
                   code: error.code,
                   signal: error.signal,

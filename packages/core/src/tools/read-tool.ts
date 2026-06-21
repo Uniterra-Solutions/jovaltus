@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
-import { resolve as resolvePath } from 'node:path';
 
 import type { Tool, ToolResult } from './types.js';
+import { resolveInWorkspace } from './workspace.js';
 
 // ---------------------------------------------------------------------------
 // Read tool definition
@@ -39,7 +39,11 @@ const READ_TOOL: Tool = {
       };
     }
 
-    const resolved = resolvePath(context.workspaceRoot, filePath);
+    const wsResult = resolveInWorkspace(context.workspaceRoot, filePath);
+    if (!wsResult.ok) {
+      return { success: false, error: wsResult.error };
+    }
+    const resolved = wsResult.path;
 
     try {
       const content = await readFile(resolved, { encoding: 'utf-8' });

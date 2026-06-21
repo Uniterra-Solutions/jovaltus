@@ -20,8 +20,8 @@ import type {
 function createMemoryProvider(): ContextProvider<MemoryContext | null> {
   return {
     type: 'memory',
-    async get(): Promise<MemoryContext | null> {
-      return null; // graceful degradation – no memory backend yet
+    get(): Promise<MemoryContext | null> {
+      return Promise.resolve(null); // graceful degradation – no memory backend yet
     },
   };
 }
@@ -33,8 +33,8 @@ function createMemoryProvider(): ContextProvider<MemoryContext | null> {
 function createSkillsProvider(): ContextProvider<SkillsContext | null> {
   return {
     type: 'skills',
-    async get(): Promise<SkillsContext | null> {
-      return null; // graceful degradation – no skills backend yet
+    get(): Promise<SkillsContext | null> {
+      return Promise.resolve(null); // graceful degradation – no skills backend yet
     },
   };
 }
@@ -49,9 +49,9 @@ function createToolsProvider(
 ): ContextProvider<ToolDescriptions> {
   return {
     type: 'tools',
-    async get(): Promise<ToolDescriptions> {
+    get(): Promise<ToolDescriptions> {
       if (!registry) {
-        return { tools: [] };
+        return Promise.resolve({ tools: [] });
       }
 
       const tools = registry.list().map((t) => ({
@@ -61,7 +61,7 @@ function createToolsProvider(
         parameters: t.parameters,
       }));
 
-      return { tools };
+      return Promise.resolve({ tools });
     },
   };
 }
@@ -73,8 +73,8 @@ function createToolsProvider(
 function createMCPProvider(): ContextProvider<MCPContext | null> {
   return {
     type: 'mcps',
-    async get(): Promise<MCPContext | null> {
-      return null; // graceful degradation – no MCP servers yet
+    get(): Promise<MCPContext | null> {
+      return Promise.resolve(null); // graceful degradation – no MCP servers yet
     },
   };
 }
@@ -98,11 +98,24 @@ export function createContextComposer(
     async compose(options?: ContextComposerOptions): Promise<AgentContext> {
       const toolsProvider = createToolsProvider(options?.toolRegistry);
 
+      // Wrap optional providers so individual rejections degrade to null
+      // rather than failing the whole composition. Tool provider is
+      // mandatory — its rejections propagate.
+      const safeGet = async <T>(
+        provider: ContextProvider<T | null>,
+      ): Promise<T | null> => {
+        try {
+          return await provider.get();
+        } catch {
+          return null;
+        }
+      };
+
       const [memory, skills, tools, mcps] = await Promise.all([
-        memoryProvider.get(),
-        skillsProvider.get(),
+        safeGet(memoryProvider),
+        safeGet(skillsProvider),
         toolsProvider.get(),
-        mcpProvider.get(),
+        safeGet(mcpProvider),
       ]);
 
       return { memory, skills, tools, mcps };

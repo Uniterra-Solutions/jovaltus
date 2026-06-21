@@ -28,6 +28,11 @@ jovaltus-main/
 | `pnpm typecheck` | TypeScript type checking |
 | `pnpm lint` | ESLint |
 | `pnpm build` | Build all packages |
+| `apltk codegraph status` | Code graph index statistics |
+| `apltk codegraph query <symbol>` | Search indexed symbols |
+| `apltk codegraph context <question>` | Build task-oriented context |
+| `apltk codegraph callers/callees <symbol>` | Find callers or callees |
+| `apltk codegraph impact <symbol>` | Analyze change impact radius |
 
 ## Architecture Constraints
 

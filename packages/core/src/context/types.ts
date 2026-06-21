@@ -68,10 +68,19 @@ export interface AgentContext {
 // Composer
 // ---------------------------------------------------------------------------
 
+/** Narrow tool-registry entry shape needed by the composer. */
+export interface ToolRegistryItem {
+  readonly definition: {
+    readonly id: string;
+    readonly name: string;
+    readonly description: string;
+  };
+  readonly parameters: ToolParameterSchema;
+}
+
 export interface ContextComposerOptions {
   /** Tool provider needs a registry to enumerate tool definitions. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  toolRegistry?: { list(): readonly any[] };
+  toolRegistry?: { list(): readonly ToolRegistryItem[] };
 }
 
 export interface ContextComposer {

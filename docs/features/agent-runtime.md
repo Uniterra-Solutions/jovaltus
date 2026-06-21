@@ -19,12 +19,22 @@
 - **Then** a structured read failure is returned
 - **And** the file is not marked as read in the session
 
+- **Given** the agent specifies a file path that resolves outside the workspace root
+- **When** the read operation is attempted
+- **Then** a structured `INVALID_PARAMS` error is returned
+- **And** the file is not marked as read in the session
+
 ## Workspace File Writing
 
 - **Given** the agent specifies a path and file content
 - **When** the path does not currently exist
 - **Then** a new file is created at that path
 - **And** any missing parent directories are created automatically
+
+- **Given** the agent specifies a file path that resolves outside the workspace root
+- **When** the write operation is attempted
+- **Then** a structured `INVALID_PARAMS` error is returned
+- **And** no file is created on disk
 
 - **Given** the agent specifies an existing file path that has not been read in the current session
 - **When** the write operation is attempted
@@ -49,6 +59,11 @@
 - **Given** the agent attempts to edit a file that has not been read in the current session
 - **When** the edit operation is attempted
 - **Then** it is rejected with a read-before-write error
+
+- **Given** the agent specifies a file path that resolves outside the workspace root
+- **When** the edit operation is attempted
+- **Then** a structured `INVALID_PARAMS` error is returned
+- **And** the file content is left unchanged
 
 ## Bash Command Execution
 
@@ -75,6 +90,12 @@
 - **Then** memory, skills, and MCP sections return null
 - **And** the tools section returns an empty list
 - **And** the overall context request succeeds
+
+- **Given** optional context sources (memory, skills, MCP servers) fail or reject
+- **When** context is composed
+- **Then** only the failing sections degrade to null
+- **And** successful providers' data is preserved
+- **And** the overall context request still succeeds
 
 - **Given** a tool registry is provided to the context composer
 - **When** tool descriptions are generated
