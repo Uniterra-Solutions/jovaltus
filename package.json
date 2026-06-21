@@ -1,0 +1,29 @@
+{
+  "name": "jovaltus",
+  "version": "0.0.0",
+  "private": true,
+  "description": "歲淵 - VS Code AI coding agent MVP",
+  "type": "module",
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "clean": "pnpm -r exec rimraf dist *.tsbuildinfo",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "typecheck": "tsc -b tsconfig.json --pretty false"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.10.1",
+    "@types/vscode": "^1.107.0",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.7.4",
+    "rimraf": "^6.1.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.50.0",
+    "vitest": "^4.0.16"
+  }
+}
