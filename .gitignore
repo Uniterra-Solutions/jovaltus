@@ -5,4 +5,6 @@ coverage/
 .vscode-test/
 .env
 .env.*
-
+docs/plans/*
+docs/archive/*
+.apollo-toolkit/
