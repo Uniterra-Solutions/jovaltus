@@ -36,7 +36,7 @@ The `ReadState` interface (`packages/core/src/tools/read-state.ts:7-19`) tracks 
 
 ### Structured Error Contract
 
-Every tool result is typed as `ToolResult` (`packages/core/src/tools/types.ts:28-32`) with `success`, optional `data`, and optional `error` containing a `ToolErrorCode` and message. The registry guarantees no exceptions escape `execute()` — unknown tools return `TOOL_NOT_FOUND`, handler exceptions are caught and returned as `UNKNOWN_ERROR`.
+Every tool result is typed as `ToolResult` (`packages/core/src/tools/types.ts:30-34`) with `success`, optional `data`, and optional `error` containing a `ToolErrorCode` and message. The registry guarantees no exceptions escape `execute()` — unknown tools return `TOOL_NOT_FOUND`, handler exceptions are caught and returned as `UNKNOWN_ERROR`.
 
 ## Module Boundary: Context
 

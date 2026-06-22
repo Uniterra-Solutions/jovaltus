@@ -12,7 +12,7 @@ interface ToolResult<T = unknown> {
 }
 ```
 
-**Evidence**: `packages/core/src/tools/types.ts:28-32`
+**Evidence**: `packages/core/src/tools/types.ts:30-34`
 
 **Reason**: Structured results allow agent loops to inspect failure details (error code, message, optional details) without try/catch around every tool call.
 
@@ -33,7 +33,7 @@ type ToolErrorCode =
   | 'UNKNOWN_ERROR';
 ```
 
-**Evidence**: `packages/core/src/tools/types.ts:7-16`
+**Evidence**: `packages/core/src/tools/types.ts:9-18`
 
 **Reason**: Categorized codes let the runtime handle failures by category (e.g., retry on `EXECUTION_FAILED`, prompt user on `FILE_NOT_READ`) without parsing free-form messages.
 
@@ -41,7 +41,7 @@ type ToolErrorCode =
 
 The registry's `execute()` wraps every handler call in a try/catch. Any thrown exception is converted to a `ToolResult` with code `UNKNOWN_ERROR` and the original error in `details`. This guarantees that tool handlers cannot crash the runtime through unhandled exceptions.
 
-**Evidence**: `packages/core/src/tools/registry.ts:43-54`
+**Evidence**: `packages/core/src/tools/registry.ts:53-64`
 
 **Reason**: Handler code may encounter unexpected failures. A thrown exception should become a machine-consumable failure, not propagate as an uncaught error.
 
