@@ -1,33 +1,38 @@
 # Jovaltus — AGENTS.md
 
-This file is for non-Claude agents (Codex, Copilot, etc.).
+For non-Claude agents (Codex, Copilot, etc.).
 
-## Project Overview
+## Common Development Commands
 
-Jovaltus is a TypeScript monorepo using pnpm workspaces. The core package (`packages/core`) provides a tool registry, built-in file/bash tools with read-before-write safety, and a context composer for single-agent runs.
+| Command | Description |
+|---|---|
+| `pnpm test -- --run` | Run all tests (vitest) |
+| `pnpm typecheck` | TypeScript type checking across workspace |
+| `pnpm lint` | ESLint across workspace |
+| `pnpm build` | Build all packages |
+| `pnpm clean` | Remove dist directories and build info |
+| `apltk codegraph status` | Code graph index statistics |
+| `apltk codegraph query <symbol>` | Search indexed symbols |
+| `apltk codegraph context <question>` | Build task-oriented context |
+| `apltk codegraph callers/callees <symbol>` | Find callers or callees |
+| `apltk codegraph impact <symbol>` | Analyze change impact radius |
 
-## Module Boundaries
+## Business Goals
 
-- **`packages/core/src/tools/`** — `ToolRegistry`, `ReadState`, built-in tools (`file_read`, `file_write`, `file_edit`, `bash`)
-- **`packages/core/src/context/`** — `ContextComposer`, `ContextProvider`, `AgentContext`
-- **`apps/extension/`** — IDE extension entry point (separate concern)
+Jovaltus (歲淵) is a VS Code AI coding agent MVP: a safe runtime for agent tool execution (file read/write/edit, bash) and composable agent context.
 
-## Key Interfaces
+## Documentation Index
 
-- `ToolRegistry` — `register()`, `get()`, `getByName()`, `list()`, `execute()`
-- `Tool` — `definition` + `parameters` + `handler`
-- `ToolResult` — `success`, `data`, `error`
-- `ReadState` — `hasRead()`, `markRead()`, `getReadFiles()`, `reset()`
-- `ContextComposer` — `compose(options?)`
-- `AgentContext` — `memory`, `skills`, `tools`, `mcps`
+- `docs/architecture/core-package.md` — Module boundaries and data flow
+- `docs/features/agent-runtime.md` — BDD feature specifications
+- `docs/principles/error-handling.md` — Structured tool error conventions
+- `docs/principles/testing-conventions.md` — Test placement and patterns
+- `README.md` — Project overview
+- `packages/core/AGENTS.md` — Core package constraints
+- `apps/extension/AGENTS.md` — Extension package constraints
 
-## Code Intelligence
+## Prohibitions
 
-CodeGraph is available for local exploration:
-
-```
-apltk codegraph query <symbol>
-apltk codegraph context "question about the code"
-apltk codegraph callers/callees <symbol>
-apltk codegraph impact <symbol>
-```
+- Never bypass `resolveInWorkspace()` for boundary checks — unresolved paths can be exploited via symlinks (fixed in `ba6f8f6`)
+- Always validate numeric parameters (e.g. `timeoutMs`) at handler entry with range checks before I/O (fixed in `e43fb17`)
+- Never execute tool handlers or mutate read state during context composition — context is metadata only (`src/context/composer.ts`)

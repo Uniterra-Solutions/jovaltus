@@ -23,14 +23,14 @@
 
 ## Hardening Checklist
 
-- [ ] Regression tests for bug-prone / high-risk behavior: read-before-write and registry error wrapping must be covered.
-- [ ] Unit drift checks for non-trivial logic: registry lookup/listing, context composition defaults, and provider injection must be covered.
-- [ ] Property-based coverage for business logic: N/A because current logic is small deterministic API behavior with clearer example-based oracles.
-- [ ] External services mocked / faked: N/A because no external service is introduced; filesystem and child process behavior use temp directories and local commands.
-- [ ] Adversarial cases for abuse paths: unread existing file write/edit attempts, unknown tools, thrown handlers, invalid params, command failure.
-- [ ] Authorization, idempotency, and concurrency risks assessed: runtime selection is in scope; permission UI and multi-agent read-state sharing are out of scope.
-- [ ] Assertions verify outcomes and side-effects, not just success flags: read state and file content must be asserted where behavior mutates state.
-- [ ] Fixtures are reproducible: tests must use temp directories and simple deterministic shell commands.
+- [x] Regression tests for bug-prone / high-risk behavior: read-before-write and registry error wrapping must be covered.
+- [x] Unit drift checks for non-trivial logic: registry lookup/listing, context composition defaults, and provider injection must be covered.
+- [x] Property-based coverage for business logic: N/A because current logic is small deterministic API behavior with clearer example-based oracles.
+- [x] External services mocked / faked: N/A because no external service is introduced; filesystem and child process behavior use temp directories and local commands.
+- [x] Adversarial cases for abuse paths: unread existing file write/edit attempts, unknown tools, thrown handlers, invalid params, command failure.
+- [x] Authorization, idempotency, and concurrency risks assessed: runtime selection is in scope; permission UI and multi-agent read-state sharing are out of scope.
+- [x] Assertions verify outcomes and side-effects, not just success flags: read state and file content must be asserted where behavior mutates state.
+- [x] Fixtures are reproducible: tests must use temp directories and simple deterministic shell commands.
 
 ## E2E / Integration Decisions
 
