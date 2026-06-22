@@ -1,15 +1,18 @@
-# apps/extension
+# MODULE DESCRIPTION
 
-VS Code extension entry point — activates and bootstraps Jovaltus agent tooling into the IDE.
+The VS Code extension host package. It owns the activation contract with VS Code and bootstraps the extension context by delegating to shared primitives in `packages/core`. It does not implement user-facing commands, webviews, status bar features, or agent loop behavior.
 
-## Module File List
+# MODULE FILE LIST
 
-- `src/extension.ts` — Extension activate/deactivate hooks
-- `package.json` — Extension manifest (VS Code engine, activation events)
-- `tsconfig.json` — TypeScript config (references core package)
+- `package.json` — Extension manifest, engine compatibility, scripts, and workspace dependency on `@jovaltus/core`.
+- `tsconfig.json` — TypeScript project reference configuration extending the base config.
+- `src/extension.ts` — Extension `activate` and `deactivate` entrypoints.
+- `.vscodeignore` — Files excluded from the packaged VSIX.
 
-## Rules Should Not Be Violated
+# RULES SHOULD NOT BE VIOLATED
 
-- Must not duplicate or reimplement core runtime logic — import from `@jovaltus/core`
-- Extension activation must be non-blocking and side-effect-free until a user action triggers agent operations
-- Must not hardcode VS Code engine API surface beyond what `@types/vscode` declares
+- The extension host must remain a thin bootstrap surface; domain logic belongs in `packages/core` or future feature packages.
+- The extension must declare `engines.vscode` compatibility and a `main` entry that points to emitted JavaScript under `dist/`.
+- The package must use `workspace:*` to depend on `@jovaltus/core`.
+- Generated `.vsix` and `dist/` outputs must not be committed to source control.
+- The `package` script must write the VSIX to `dist/jovaltus-extension.vsix` so CI and README instructions stay aligned.

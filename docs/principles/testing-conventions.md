@@ -2,11 +2,19 @@
 
 ## Test File Placement
 
-Tests are co-located with their source files using the `.test.ts` suffix. Each test file tests one source module.
+Tests are co-located with their source files using the `.test.ts` suffix. Each test file tests one source module. Vitest discovers tests under `packages/**/*.test.ts` and `apps/**/*.test.ts`.
 
 **Evidence**: `packages/core/src/tools/registry.test.ts` tests `registry.ts`; `packages/core/src/context/composer.test.ts` tests `composer.ts`
 
 **Reason**: Co-location makes it easy to find tests for a given module and keeps imports relative.
+
+## Tests Use Explicit Imports
+
+Tests import `describe`, `expect`, `it` from `vitest` rather than relying on Vitest globals. Functions under test use explicit named imports.
+
+**Evidence**: `packages/core/src/index.test.ts:1-3` imports `describe`, `expect`, `it` from `vitest` and `createAgentTask` from `./index.js`.
+
+**Reason**: Explicit imports keep tests self-documenting and avoid coupling to a specific test runner's global injection.
 
 ## Integration-Style Unit Tests
 
@@ -37,3 +45,9 @@ const result = await registry.execute('file_read', { filePath: 'sub/hello.txt' }
 **Evidence**: All tool tests in `packages/core/src/tools/registry.test.ts`
 
 **Reason**: `register()` returns `void` so chaining is not possible (`registry is undefined`). The explicit pattern is also clearer about what is being registered and executed.
+
+## Coverage Reporting
+
+Vitest emits coverage in both human-readable text and machine-readable LCOV formats. This supports local development feedback and downstream coverage visualization.
+
+**Evidence**: `vitest.config.ts:5-7` configures `reporter: ['text', 'lcov']`.

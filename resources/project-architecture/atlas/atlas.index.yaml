@@ -1,0 +1,8 @@
+meta:
+  title: Project architecture
+  summary: ''
+  updatedAt: '2026-06-21T14:39:55.756Z'
+actors: []
+features:
+  - vscode-extension-platform
+edges: []

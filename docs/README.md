@@ -1,34 +1,27 @@
 # Project Documentation
 
-This directory contains standardized project documentation.
+This directory contains the standardized project documentation for Jovaltus.
 
-## Categories
+## Directory Layout
 
-| Directory | Purpose | Audience |
-|---|---|---|
-| `features/` | What the system does (BDD from user perspective) | Product, QA, new developers |
-| `architecture/` | How the system is designed (module boundaries, data flow) | Developers, architects |
-| `principles/` | How code is written (conventions, patterns) | Developers |
+- `docs/features/` — User-visible behavior described in BDD form.
+- `docs/architecture/` — Macro-level design principles and module boundaries.
+- `docs/principles/` — Recurring code-level conventions and constraints.
 
-## Maintenance Guide
+## Maintenance Guidance
 
 ### Evidence Traceability
 
-Every documentation claim must be traceable to source code evidence (file path + line range). Claims that cannot be directly verified from code are marked with `[INFERRED]`.
+Every claim in these documents must be traceable to a source file and line range. If a claim cannot be directly verified from the code, mark it with `[INFERRED]` and explain the basis of the inference.
 
 ### LLM Safety
 
-When regenerating documentation with LLMs, only feed structured metadata (file lists, module boundaries, API signatures). Do not transmit full source code.
+When updating documentation with LLM assistance, feed only structured metadata — file lists, module boundaries, API endpoints, function signatures, dependency graphs — rather than full source code bodies.
 
 ### Incremental Updates
 
-When code changes, only regenerate affected doc sections. Use `git diff` to identify changed file scopes, then update only the `.md` files whose evidence is in those files.
+When code changes, use `git diff` to identify affected areas and update only the relevant document sections. Do not regenerate the entire documentation set for a localized change.
 
 ### Drift Detection
 
-Periodically (monthly or quarterly) compare docs against actual code. Fix drift in affected sections only — do not full-rewrite unless the module has been substantially redesigned.
-
-## Related
-
-- `CLAUDE.md` and `AGENTS.md` at project root contain cross-cutting constraints
-- `docs/plans/` contains implementation plans (not product docs)
+Review these documents periodically against the codebase. When drift is found, patch the affected sections instead of rewriting whole files.

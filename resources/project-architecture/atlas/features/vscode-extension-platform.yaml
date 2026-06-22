@@ -1,0 +1,57 @@
+slug: vscode-extension-platform
+title: vscode-extension-platform
+story: ''
+dependsOn: []
+submodules:
+  - slug: extension-host
+    kind: service
+    role: ''
+    functions: []
+    variables: []
+    dataflow: []
+    errors: []
+    evidence:
+      level: observed
+      source: ''
+      sourceFile: null
+      sourceLine: null
+  - slug: workspace-validation
+    kind: service
+    role: ''
+    functions: []
+    variables: []
+    dataflow: []
+    errors: []
+    evidence:
+      level: observed
+      source: ''
+      sourceFile: null
+      sourceLine: null
+  - slug: vsix-packaging-ci
+    kind: queue
+    role: ''
+    functions: []
+    variables: []
+    dataflow: []
+    errors: []
+    evidence:
+      level: inferred
+      source: ''
+      sourceFile: null
+      sourceLine: null
+edges:
+  - id: e-ke3meu
+    from: extension-host
+    to: workspace-validation
+    kind: data-row
+    label: ''
+  - id: e-d6x458
+    from: workspace-validation
+    to: vsix-packaging-ci
+    kind: data-row
+    label: ''
+evidence:
+  level: observed
+  source: ''
+  sourceFile: null
+  sourceLine: null
