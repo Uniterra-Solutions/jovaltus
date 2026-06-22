@@ -60,7 +60,7 @@ const EDIT_TOOL: Tool = {
       };
     }
 
-    const wsResult = resolveInWorkspace(context.workspaceRoot, filePath);
+    const wsResult = await resolveInWorkspace(context.workspaceRoot, filePath);
     if (!wsResult.ok) {
       return { success: false, error: wsResult.error };
     }

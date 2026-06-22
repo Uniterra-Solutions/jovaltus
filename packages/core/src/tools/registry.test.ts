@@ -1,5 +1,5 @@
 import { mkdtempSync, writeFileSync } from 'node:fs';
-import { access, mkdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -208,6 +208,22 @@ describe('Read tool', () => {
     expect(result.success).toBe(true);
     expect(result.data).toBe('hello');
   });
+
+  it('rejects reading through a symlink that resolves outside the workspace and does not mark read state', async () => {
+    const { root, context } = setup();
+    const outsideRoot = mkdtempSync(join(tmpdir(), 'jovaltus-outside-'));
+    await writeFile(join(outsideRoot, 'secret.txt'), 'outside secret');
+    await symlink(outsideRoot, join(root, 'outside-link'), 'dir');
+
+    const registry = createToolRegistry();
+    registry.register(createReadTool());
+    const result = await registry.execute('file_read', { filePath: 'outside-link/secret.txt' }, context);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe('INVALID_PARAMS');
+    expect(context.readState.hasRead(join(root, 'outside-link', 'secret.txt'))).toBe(false);
+    expect(context.readState.hasRead(join(outsideRoot, 'secret.txt'))).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -305,6 +321,21 @@ describe('Write tool', () => {
     expect(result.success).toBe(false);
     expect(result.error?.code).toBe('INVALID_PARAMS');
   });
+
+  it('rejects writing through a symlink that resolves outside the workspace', async () => {
+    const { root, context } = setup();
+    const outsideRoot = mkdtempSync(join(tmpdir(), 'jovaltus-outside-'));
+    await writeFile(join(outsideRoot, 'secret.txt'), 'original');
+    await symlink(outsideRoot, join(root, 'outside-link'), 'dir');
+
+    const registry = createToolRegistry();
+    registry.register(createWriteTool());
+    const result = await registry.execute('file_write', { filePath: 'outside-link/secret.txt', content: 'changed' }, context);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe('INVALID_PARAMS');
+    expect(await readFile(join(outsideRoot, 'secret.txt'), 'utf-8')).toBe('original');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -380,6 +411,23 @@ describe('Edit tool', () => {
 
     expect(result.success).toBe(false);
     expect(result.error?.code).toBe('INVALID_PARAMS');
+  });
+
+  it('rejects editing through a symlink that resolves outside the workspace', async () => {
+    const { root, context } = setup();
+    const outsideRoot = mkdtempSync(join(tmpdir(), 'jovaltus-outside-'));
+    await writeFile(join(outsideRoot, 'secret.txt'), 'hello secret');
+    await symlink(outsideRoot, join(root, 'outside-link'), 'dir');
+    // Pre-mark as read to prove the workspace boundary check fires before edit access
+    context.readState.markRead(join(root, 'outside-link', 'secret.txt'));
+
+    const registry = createToolRegistry();
+    registry.register(createEditTool());
+    const result = await registry.execute('file_edit', { filePath: 'outside-link/secret.txt', oldString: 'secret', newString: 'public' }, context);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe('INVALID_PARAMS');
+    expect(await readFile(join(outsideRoot, 'secret.txt'), 'utf-8')).toBe('hello secret');
   });
 });
 
