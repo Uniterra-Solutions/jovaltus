@@ -169,6 +169,21 @@ describe('Read tool', () => {
     expect(context.readState.hasRead(join(root, '..', 'outside.txt'))).toBe(false);
   });
 
+  it('accepts a path whose first segment begins with .. inside the workspace', async () => {
+    const { root, context } = setup();
+    const dir = join(root, '..foo');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'hello.txt'), 'hello world');
+
+    const registry = createToolRegistry();
+    registry.register(createReadTool());
+    const result = await registry.execute('file_read', { filePath: '..foo/hello.txt' }, context);
+
+    expect(result.success).toBe(true);
+    expect(result.data).toBe('hello world');
+    expect(context.readState.hasRead(join(root, '..foo', 'hello.txt'))).toBe(true);
+  });
+
   it('rejects an absolute path outside the workspace', async () => {
     const { context } = setup();
     const registry = createToolRegistry();
@@ -401,5 +416,16 @@ describe('Bash tool', () => {
 
     expect(result.success).toBe(false);
     expect(result.error?.code).toBe('EXECUTION_FAILED');
+  });
+
+  it('rejects an out-of-range timeoutMs with INVALID_PARAMS', async () => {
+    const { context } = setup();
+    const registry = createToolRegistry();
+    registry.register(createBashTool());
+    const result = await registry.execute('bash', { command: 'echo hello', timeoutMs: Number.MAX_SAFE_INTEGER }, context);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe('INVALID_PARAMS');
+    expect(result.error?.message).toMatch(/timeoutMs/i);
   });
 });

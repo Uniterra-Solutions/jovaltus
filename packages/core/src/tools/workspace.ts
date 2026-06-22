@@ -1,4 +1,4 @@
-import { relative, resolve } from 'node:path';
+import { relative, resolve, sep } from 'node:path';
 
 // ---------------------------------------------------------------------------
 // Workspace containment helpers
@@ -36,8 +36,11 @@ export function resolveInWorkspace(
   const resolved = resolve(workspaceRoot, requestedPath);
   const rel = relative(workspaceRoot, resolved);
 
-  // When `rel` starts with `..` the resolved path is outside the workspace.
-  if (rel.startsWith('..')) {
+  // When `rel` equals `..` (exact parent directory) or starts with `../` (or
+  // the platform-specific equivalent, e.g. `..\\` on Windows), the resolved
+  // path escapes the workspace. Legitimate path segments whose name begins
+  // with two dots (e.g. `..foo`) are unaffected.
+  if (rel === '..' || rel.startsWith('..' + sep)) {
     return {
       ok: false,
       error: {
