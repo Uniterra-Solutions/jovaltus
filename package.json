@@ -1,9 +1,6 @@
 {
   "name": "jovaltus",
   "private": true,
-  "workspaces": [
-    "packages/*"
-  ],
   "engines": {
     "node": ">=22.0.0"
   },
@@ -14,7 +11,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "package": "npm run package -w packages/extension",
+    "package": "pnpm --filter jovaltus run package",
     "prepare": "husky"
   },
   "devDependencies": {
