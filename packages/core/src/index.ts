@@ -19,3 +19,18 @@ export type { ModelClient } from './model/client.js';
 export { createModelClient } from './model/client.js';
 export { OpenAIProvider } from './model/openai-provider.js';
 export { AnthropicProvider } from './model/anthropic-provider.js';
+
+// Agent
+export type { AgentRole, AgentContext, CreateAgentOptions } from './agent/types.js';
+export { createAgent, createModelRegistry } from './agent/factory.js';
+export { ToolRegistry } from './agent/tool-registry.js';
+export { restrictToDirectory } from './agent/restrict-directory.js';
+export {
+  readTool,
+  writeTool,
+  editTool,
+  bashTool,
+  READ_ONLY_TOOLS,
+  READ_WRITE_TOOLS,
+  VERIFY_TOOLS,
+} from './agent/tools/index.js';
