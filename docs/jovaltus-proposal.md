@@ -235,6 +235,325 @@ Verification Agent 執行 BDD 驗證 → 發現驗證失敗 → Verification Fix
 
 每輪 reviewer 所見的修改範圍只增不減（第一輪見原始修改，第二輪見原始加 fixer 首輪修改，第三輪再加 fixer 第二輪修改），確保審查的完整性。
 
+### 4.6 Full Mode Agent 間傳導欄位
+
+Full Mode 各 agent 之間透過結構化 JSON 傳遞資料，所有 JSON 皆經 Zod schema 驗證後才傳遞。以下按傳遞方向列出各階段的 schema。
+
+---
+
+#### Phase 1：Main Agent → Planner Agent
+
+Main Agent 與用戶對話後產出，同時渲染為 SPEC.md / DESIGN.md 供人類審閱：
+
+```json
+{
+  "spec": {
+    "title": "功能名稱",
+    "goal": "業務目標",
+    "requirements": [
+      {
+        "id": "REQ-1",
+        "description": "需求描述",
+        "bdd": { "given": "前提條件", "when": "操作", "then": "預期結果" }
+      }
+    ],
+    "out_of_scope": ["不在此範圍的事項"],
+    "constraints": ["技術/時程/法規約束"]
+  },
+  "design": {
+    "modules": [
+      {
+        "name": "模組名稱",
+        "responsibility": "職責描述",
+        "files": ["src/xxx.ts"],
+        "dependencies": ["其他模組"]
+      }
+    ],
+    "external_dependencies": [
+      { "name": "套件/API 名稱", "purpose": "用途" }
+    ]
+  }
+}
+```
+
+---
+
+#### Phase 2：Planner Agent → Coordinator
+
+```json
+{
+  "batches": [
+    {
+      "id": "B1",
+      "order": 1,
+      "workers": ["W1", "W2"],
+      "parallel": true,
+      "depends_on": [],
+      "gate": "所有 worker 皆有 review ✅"
+    },
+    {
+      "id": "B2",
+      "order": 2,
+      "workers": ["W3"],
+      "parallel": false,
+      "depends_on": ["B1"],
+      "gate": "worker review ✅ + batch integration ✅"
+    }
+  ],
+  "workers": {
+    "W1": {
+      "task_id": "T1",
+      "plan": "自包含任務描述，含檔案路徑與修改範圍",
+      "affected_files": ["src/auth.ts"],
+      "verification": "如何驗證此任務正確",
+      "model_tier": "worker"
+    }
+  }
+}
+```
+
+---
+
+#### Phase 3 Worker 層內循環
+
+**Coordinator → Worker Agent：**
+```json
+{
+  "task_id": "T1",
+  "plan": "自包含任務指令",
+  "allowed_files": ["src/auth.ts", "src/session.ts"],
+  "worktree": "worktree-t1"
+}
+```
+
+**Worker Agent → Coordinator：**
+```json
+{
+  "task_id": "T1",
+  "status": "completed",
+  "changed_files": ["src/auth.ts", "src/session.ts"],
+  "summary": "實作摘要",
+  "diff_ref": "worktree commit hash"
+}
+```
+
+**Coordinator → Reviewer Agent：**
+```json
+{
+  "task_id": "T1",
+  "plan": "原始任務計劃",
+  "diff": "行級 diff 資料",
+  "changed_files": ["src/auth.ts"]
+}
+```
+
+**Reviewer Agent → Coordinator（審查 verdict）：**
+```json
+{
+  "task_id": "T1",
+  "verdict": "pass | fail",
+  "findings": [
+    {
+      "severity": "P0 | P1 | P2 | P3",
+      "description": "問題描述",
+      "file": "src/auth.ts",
+      "line": 42,
+      "suggestion": "修正建議"
+    }
+  ]
+}
+```
+
+**Coordinator → Fixer Agent（verdict 為 fail 時）：**
+```json
+{
+  "task_id": "T1",
+  "findings": [/* 來自 Reviewer 的 finding 清單 */],
+  "code_context": "修改前的原始程式碼",
+  "allowed_files": ["src/auth.ts"]
+}
+```
+
+**Fixer Agent → Coordinator：**
+```json
+{
+  "task_id": "T1",
+  "status": "fixed",
+  "changes": ["修正內容摘要"]
+}
+```
+
+**Coordinator → Simplifier Agent（review 通過後）：**
+```json
+{
+  "task_id": "T1",
+  "clean_diff": "起點 vs 最終（不包含 fix 中間痕跡）",
+  "changed_files": ["src/auth.ts"]
+}
+```
+
+**Simplifier Agent → Coordinator：**
+```json
+{
+  "task_id": "T1",
+  "status": "simplified",
+  "original_lines": 120,
+  "simplified_lines": 95,
+  "test_status": "passed"
+}
+```
+
+---
+
+#### Phase 3 Batch 層
+
+**Coordinator → Batch Reviewer（批次內所有 worker ✅ 後）：**
+```json
+{
+  "batch_id": "B1",
+  "workers": ["W1", "W2"],
+  "worker_summaries": [/* 各 worker 的 summary */],
+  "clean_diff": "批次開始前 vs 所有 worker 完成後",
+  "task_plans": [/* 所有任務的計劃 */]
+}
+```
+
+**Batch Reviewer → Coordinator：**
+```json
+{
+  "batch_id": "B1",
+  "verdict": "pass | fail",
+  "findings": [
+    {
+      "severity": "P0 | P1 | P2",
+      "description": "跨任務整合問題",
+      "involving_workers": ["W1", "W2"],
+      "suggestion": "修正建議"
+    }
+  ]
+}
+```
+
+**Coordinator → Batch Fixer（verdict 為 fail 時）：**
+```json
+{
+  "batch_id": "B1",
+  "findings": [/* 來自 Batch Reviewer */],
+  "clean_diff": "同 reviewer 所見（無 worker 內部痕跡）",
+  "task_plans": [/* 所有任務計劃 */]
+}
+```
+
+**Batch Fixer → Coordinator：**
+```json
+{
+  "batch_id": "B1",
+  "status": "fixed",
+  "changes": ["修正摘要"]
+}
+```
+
+---
+
+#### Phase 4：Spec 層
+
+**Coordinator → Spec Reviewer（所有批次完成後）：**
+```json
+{
+  "spec": "原始 SPEC 資料",
+  "design": "原始 DESIGN 資料",
+  "clean_diff": "全專案開始前 vs 全部批次完成後"
+}
+```
+
+**Spec Reviewer → Coordinator：**
+```json
+{
+  "verdict": "pass | fail",
+  "findings": [
+    {
+      "severity": "P0 | P1",
+      "description": "spec 未滿足項目",
+      "requirement_id": "REQ-1",
+      "suggestion": "修正建議"
+    }
+  ]
+}
+```
+
+**Coordinator → Spec Fixer（verdict 為 fail 時）：**
+```json
+{
+  "findings": [/* 來自 Spec Reviewer */],
+  "clean_diff": "同 reviewer 所見",
+  "spec": "原始 SPEC",
+  "design": "原始 DESIGN"
+}
+```
+
+**Spec Fixer → Coordinator：**
+```json
+{
+  "status": "fixed",
+  "changes": ["修正摘要"]
+}
+```
+
+---
+
+#### Phase 5：Verification 層
+
+**Coordinator → Verification Agent（spec review 通過後）：**
+```json
+{
+  "bdd_cases": [
+    {
+      "id": "REQ-1",
+      "given": "前提條件",
+      "when": "操作",
+      "then": "預期結果"
+    }
+  ],
+  "clean_diff": "全專案 clean diff",
+  "env_setup": "dev server / test DB 啟動方式"
+}
+```
+
+**Verification Agent → Coordinator：**
+```json
+{
+  "results": [
+    {
+      "bdd_id": "REQ-1",
+      "status": "pass | fail",
+      "evidence": { "command": "curl ...", "exit_code": 0, "output": "..." }
+    }
+  ],
+  "overall": "pass | fail"
+}
+```
+
+**Coordinator → Verification Fixer（驗證失敗時）：**
+```json
+{
+  "failures": [
+    {
+      "bdd_id": "REQ-1",
+      "evidence": "失敗的完整證據"
+    }
+  ],
+  "clean_diff": "同 verification agent 所見"
+}
+```
+
+**Verification Fixer → Coordinator：**
+```json
+{
+  "status": "fixed",
+  "changes": ["修復摘要"]
+}
+```
+
 ### 4.5 平行化策略
 
 平行化的唯一硬約束為**檔案重疊（file overlap）**：
