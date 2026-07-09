@@ -1,6 +1,6 @@
 # 核心套件（Core Package）設計原則
 
-來源：`packages/core/src/index.ts`、`packages/core/src/agent/factory.ts`、`packages/core/src/config/manager.ts`、`packages/core/src/worktree/manager.ts`、`packages/core/src/diff/manager.ts`、`packages/core/src/planner/core.ts`
+來源：`packages/core/src/index.ts`、`packages/core/src/agent/factory.ts`、`packages/core/src/config/manager.ts`、`packages/core/src/worktree/manager.ts`、`packages/core/src/diff/manager.ts`、`packages/core/src/planner/core.ts`、`packages/core/src/orchestrator/agent-mode.ts`
 
 ## 套件定位
 
@@ -44,6 +44,7 @@
 - **Worktree 模組**：Git worktree 生命週期管理（create, list, get, merge, remove）。支援分支衝突檢測、dirty worktree 保護、合併衝突結構化回傳。對外僅暴露 `WorktreeManager`、`WorktreeError`、相關類型。來源：`packages/core/src/worktree/manager.ts:8-117`。
 - **Diff 模組**：跨層級 clean diff 計算（Worker/Batch/Spec 三級），計算起點 vs 終點的差異，不包含中間修改痕跡。支援檔案過濾、rename 檢測、50KB diff 截斷。對外僅暴露 `CleanDiffManager`、`DiffError`、相關類型。來源：`packages/core/src/diff/manager.ts:9-111`。
 - **Planner 模組**：任務排程核心邏輯，使用 Kahn 拓撲排序演算法配合檔案重疊感知的批次分組。支援 explicit dependency、output dependency、循環依賴檢測（三色 DFS）。純邏輯模組，無 I/O 或 Git 依賴。對外僅暴露 `PlannerCore`、`PlannerError`、相關類型。來源：`packages/core/src/planner/core.ts:4-141`。
+- **Orchestrator 模組**：事件驅動的四階段代理流水線（實作 → 規劃 → 驗證與修復 → 簡化 → 重新驗證），使用乾淨的 git commit 邊界與 `CleanDiffManager` 進行階段間淨差異計算。分離 coordinator（驗證器、規劃器）與 worker（實作器、修復器、簡化器）角色。支援 AbortSignal 傳播、錯誤輸出擷取及指令透過 verify-fix 循環的恢復。對外僅暴露 `AgentModeOrchestrator`、相關類型。來源：`packages/core/src/orchestrator/agent-mode.ts:1-567`。詳見 `docs/architecture/orchestrator-pipeline.md`。
 
 ## 公共 API 約定
 

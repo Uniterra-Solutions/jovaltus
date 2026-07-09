@@ -17,12 +17,13 @@
 
 # Project Documentation Index
 
-- `docs/features/chat-interface.md` — Chat panel: send, receive, theme adaptation
-- `docs/features/agent-operations.md` — File read/write/edit and bash execution (core engine; not yet wired to UI)
+- `docs/features/chat-interface.md` — Chat panel: send, streaming, phase display, tool call notifications
+- `docs/features/agent-operations.md` — File read/write/edit and bash execution (wired to orchestrator pipeline)
 - `docs/features/configuration.md` — VS Code settings for models and providers
-- `docs/architecture/core-package.md` — Core engine: agent factory, model abstraction, config layering, worktree/diff/planner infrastructure
-- `docs/architecture/extension-package.md` — Extension: activation, message protocol, webview architecture
+- `docs/architecture/core-package.md` — Core engine: agent factory, model abstraction, config layering, worktree/diff/planner/orchestrator infrastructure
+- `docs/architecture/extension-package.md` — Extension: activation, message protocol (6 event types), webview architecture, core integration
 - `docs/architecture/tool-system.md` — Tool definitions, presets, ToolRegistry, directory guard
+- `docs/architecture/orchestrator-pipeline.md` — Agent mode 4-stage pipeline: impl → plan → verify & fix → simplify → reverify
 - `docs/principles/naming-conventions.md` — File/module/class/function naming
 - `docs/principles/coding-style.md` — TS strictness, import order, export conventions
 - `docs/principles/testing-conventions.md` — Vitest patterns, temp-dir isolation, mock strategy

@@ -1,7 +1,8 @@
 # 代理操作 (Agent Operations)
 
-> **注意：** 以下功能目前為核心引擎的基礎能力，尚未完全串接至聊天介面 [INFERRED]。
-> 來源：`packages/core/src/agent/tools/*.ts`
+來源：`packages/core/src/agent/tools/*.ts`、`packages/core/src/orchestrator/agent-mode.ts`
+
+工具由 Agent Mode Orchestrator 透過資源預設組分配至代理（`agent-mode.ts` 中的 READ_WRITE_TOOLS、READ_ONLY_TOOLS、VERIFY_TOOLS），並透過 VS Code 聊天面板觸發。
 
 ## 檔案讀取 (Read)
 

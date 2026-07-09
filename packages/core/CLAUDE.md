@@ -29,6 +29,9 @@ Pure TypeScript library providing agent factory, model abstraction, configuratio
 - `src/model/types.ts` — `ChatMessage`, `CompletionRequest`, `CompletionResponse`, `TokenUsage` DTOs
 - `src/planner/core.ts` — `PlannerCore` — task scheduling with overlap-aware Kahn's topological sort
 - `src/planner/types.ts` — `PlannerError`, `TaskInput`, `TaskNode`, `Batch`, `PlanResult` types
+- `src/orchestrator/agent-mode.ts` — `AgentModeOrchestrator` — event-driven 4-stage pipeline: impl → plan → verify & fix → simplify → reverify
+- `src/orchestrator/types.ts` — `PhaseName`, `PhaseResult`, `AgentModeResult`, `AgentModeEvent`, `VerificationItem`, `CheckPlan`, `AgentModeOptions` types
+- `src/orchestrator/index.ts` — Orchestrator barrel export
 - `src/worktree/manager.ts` — `WorktreeManager` — git worktree lifecycle (create, list, get, merge, remove)
 - `src/worktree/types.ts` — `WorktreeError`, `WorktreeEntry`, `WorktreeCreateOptions`, `WorktreeMergeResult`, `WorktreeDeleteOptions` types
 
@@ -43,3 +46,4 @@ Pure TypeScript library providing agent factory, model abstraction, configuratio
 - Never expose internal modules through barrel exports — `index.ts` files use explicit named exports only, no `export * from`. Evidence: `src/index.ts`, `src/agent/index.ts` list every symbol individually
 - `src/git.ts` is the ONLY shared Git helper — manager-level `git()` wrappers delegate to it; never use `execFile`/`spawn` directly for git operations in other modules
 - Planner is pure logic — `PlannerCore` takes structured `TaskInput[]`, returns `PlanResult`, has zero I/O or git dependencies
+- Orchestrator uses Agent API exclusively — `AgentModeOrchestrator` calls `agent.prompt()` + `agent.waitForIdle()`, never imports from `src/model/`. Evidence: `src/orchestrator/agent-mode.ts:1-8` imports from agent factory, tools, diff, and git — no model/ imports

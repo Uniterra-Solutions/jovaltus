@@ -36,10 +36,12 @@
 
 類別使用 **PascalCase**，常用後綴表達語義：
 
-- `Provider` — 模型提供者封裝：`OpenAIProvider`、`AnthropicProvider`、`ChatPanelProvider`
-- `Manager` — 配置管理：`ConfigManager`
+- `Provider` — 模型提供者封裝：`OpenAIProvider`、`AnthropicProvider`、`ChatPanelProvider`、`VSCodeConfigProvider`
+- `Manager` — 資源與配置管理：`ConfigManager`、`CleanDiffManager`、`WorktreeManager`
+- `Orchestrator` — 多階段流水線編排：`AgentModeOrchestrator`
 - `Registry` — 資源註冊表：`ToolRegistry`
-- `Error` — 自訂錯誤：`ModelError`
+- `Core` — 純邏輯核心：`PlannerCore`
+- `Error` — 自訂錯誤：`ModelError`、`DiffError`、`WorktreeError`、`PlannerError`
 
 **理由**：後綴提供即時的語義提示，降低閱讀程式碼時的理解成本。
 
