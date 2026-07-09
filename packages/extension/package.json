@@ -1,0 +1,104 @@
+{
+  "name": "jovaltus",
+  "displayName": "Jovaltus",
+  "description": "AI coding agent with multi-layer quality pipeline",
+  "version": "0.0.0",
+  "private": true,
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "activationEvents": [
+    "onView:jovaltus.chatPanel"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "jovaltus",
+          "title": "Jovaltus",
+          "icon": "$(comment-discussion)"
+        }
+      ]
+    },
+    "views": {
+      "jovaltus": [
+        {
+          "id": "jovaltus.chatPanel",
+          "name": "Chat",
+          "type": "webview"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Jovaltus",
+      "properties": {
+        "jovaltus.coordinatorModel.modelId": {
+          "type": "string",
+          "default": "claude-sonnet-4-5",
+          "description": "Model ID for coordinator agents (planning, reviewing, verifying)"
+        },
+        "jovaltus.coordinatorModel.contextWindow": {
+          "type": [
+            "number",
+            "string"
+          ],
+          "default": "auto",
+          "description": "Context window size. Use 'auto' for automatic discovery or set a number."
+        },
+        "jovaltus.coordinatorModel.maxTokens": {
+          "type": "number",
+          "default": 4096,
+          "description": "Maximum output tokens for coordinator model"
+        },
+        "jovaltus.workerModel.modelId": {
+          "type": "string",
+          "default": "claude-haiku-4-5",
+          "description": "Model ID for worker agents (implementation, fixing, simplifying)"
+        },
+        "jovaltus.workerModel.contextWindow": {
+          "type": [
+            "number",
+            "string"
+          ],
+          "default": "auto",
+          "description": "Context window size. Use 'auto' for automatic discovery or set a number."
+        },
+        "jovaltus.workerModel.maxTokens": {
+          "type": "number",
+          "default": 4096,
+          "description": "Maximum output tokens for worker model"
+        },
+        "jovaltus.openai.baseUrl": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "Base URL for OpenAI-compatible API endpoint"
+        },
+        "jovaltus.openai.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for OpenAI-compatible API"
+        },
+        "jovaltus.anthropic.baseUrl": {
+          "type": "string",
+          "default": "https://api.anthropic.com",
+          "description": "Base URL for Anthropic-compatible API endpoint"
+        },
+        "jovaltus.anthropic.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for Anthropic-compatible API"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "watch": "tsc -b -w",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.95.0",
+    "@vscode/vsce": "^3.0.0"
+  }
+}

@@ -2,6 +2,9 @@ import tseslint from 'typescript-eslint';
 import js from '@eslint/js';
 
 export default tseslint.config(
+  {
+    ignores: ['**/dist/', '**/node_modules/', 'vitest.config.ts'],
+  },
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   {
@@ -30,8 +33,5 @@ export default tseslint.config(
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-misused-promises': 'error',
     },
-  },
-  {
-    ignores: ['dist/', 'node_modules/', '*.config.*'],
   },
 );
