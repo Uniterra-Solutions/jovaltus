@@ -17,27 +17,27 @@
 
 # Project Documentation Index
 
-- `docs/features/chat-interface.md` — Chat panel: send, receive, theme adaptation
-- `docs/features/agent-operations.md` — File read/write/edit and bash execution (core engine; not yet wired to UI)
-- `docs/features/configuration.md` — VS Code settings for models and providers
+- `docs/features/chat-interface.md` — Chat panel: send, streaming markdown, tool call cards, phase display, model selector, CSP, theme adaptation
+- `docs/features/agent-operations.md` — File read/write/edit and bash execution (wired to orchestrator pipeline)
+- `docs/features/configuration.md` — VS Code settings for models, providers, API key SecretStorage, model switching
 - `docs/architecture/core-package.md` — Core engine: agent factory, structured output, model abstraction, config layering, worktree/diff/planner/orchestrator infrastructure
-- `docs/architecture/extension-package.md` — Extension: activation, message protocol (7 event types), webview architecture, core integration
+- `docs/architecture/extension-package.md` — Extension: activation, message protocol (6 event types), webview architecture, core integration
 - `docs/architecture/tool-system.md` — Tool definitions, presets, ToolRegistry, directory guard
 - `docs/architecture/orchestrator-pipeline.md` — Agent mode 4-stage pipeline: impl → plan → verify & fix → simplify → reverify
 - `docs/principles/naming-conventions.md` — File/module/class/function naming
 - `docs/principles/coding-style.md` — TS strictness, import order, export conventions
-- `docs/principles/testing-conventions.md` — Vitest patterns, temp-dir isolation, mock strategy
+- `docs/principles/testing-conventions.md` — Vitest patterns, temp-dir isolation, mock strategy, jsdom for webview tests
 - `docs/principles/error-handling.md` — ModelError codes, HTTP mapping, provider error classification
 - `docs/jovaltus-proposal.md` — Original product proposal and design vision
 - `README.md` — Project overview
-- `packages/core/AGENTS.md` — Core engine module constraints
-- `packages/extension/AGENTS.md` — Extension module constraints
+- `packages/core/CLAUDE.md` — Core engine module constraints
+- `packages/extension/CLAUDE.md` — Extension module constraints
 
 ## Prohibitions
 
-- Never remove `.js` extensions from internal imports — required by NodeNext ESM resolution. Evidence: `tsconfig.base.json:13`
+- Never remove `.js` extensions from internal imports — they are required by NodeNext ESM module resolution. Evidence: `tsconfig.base.json:13` (`module: "NodeNext"`)
 - Never use the `any` type — blocked by `no-explicit-any: error` in `eslint.config.mjs:30`
-- Never run `pnpm install` without `--frozen-lockfile` in CI — CI enforces at `.github/workflows/ci.yml:25`
-- Never commit TypeScript files failing ESLint with warnings — pre-commit hook runs `lint-staged` with `--max-warnings 0` at `.husky/pre-commit:2`
+- Never run `pnpm install` without `--frozen-lockfile` in CI — CI enforces this at `.github/workflows/ci.yml:25`
+- Never commit TypeScript files that fail ESLint with warnings — pre-commit runs `lint-staged --no-stash` with `--max-warnings 0` at `.husky/pre-commit:2`
 - Never bump Node below 22 — pinned in `.nvmrc:1` and `package.json:5`
-- Never add default exports — only named exports per `eslint.config.mjs:29`
+- Never add default exports — only named exports are used throughout the codebase per `eslint.config.mjs:29`

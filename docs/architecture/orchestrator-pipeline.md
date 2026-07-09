@@ -1,6 +1,6 @@
 # 代理模式流水線（Agent Mode Pipeline）設計原則
 
-來源：`packages/core/src/orchestrator/agent-mode.ts:1-599`、`packages/core/src/orchestrator/types.ts:1-57`、`packages/core/src/orchestrator/check-plan-schema.ts:1-14`、`packages/core/src/agent/output-validation.ts:86-114`
+來源：`packages/core/src/orchestrator/agent-mode.ts:1-598`、`packages/core/src/orchestrator/types.ts:1-57`、`packages/core/src/orchestrator/check-plan-schema.ts`、`packages/core/src/agent/output-validation.ts:95-123`
 
 ## 流水線架構
 
@@ -26,11 +26,11 @@
 執行流程：
 
 1. 捕獲 git HEAD 作為起始 commit
-2. 建立 worker 代理，注入實作系統提示（`agent-mode.ts:21-26`）
+2. 建立 worker 代理，注入實作系統提示（`agent-mode.ts:23-28`）
 3. 將使用者任務作為 prompt 發送給代理
 4. 等待代理空閒（`waitForIdle()`）
-5. 自動提交為 `jovaltus: agent mode implementation`
-6. 捕獲 transcript（`agent.state.systemPrompt` + `[...agent.state.messages]`）供 Phase 2 使用
+5. 自動提交為 `jovaltus: agent mode implementation`（`agent-mode.ts:176`）
+6. 捕獲 transcript 供 Phase 2 使用
 
 來源：`packages/core/src/orchestrator/agent-mode.ts:157-187`
 
@@ -41,7 +41,7 @@
 - **輸入**：Phase 1 的 transcript（僅 user + assistant 訊息，排除 toolResult）
 - **輸出**：經過 TypeBox 驗證的結構化 `CheckPlan`
 
-Planner 代理分析實作階段的工作記錄，產生結構化 JSON 摘要。輸出格式由 `CheckPlanSchema`（`check-plan-schema.ts:3-14`）定義：
+Planner 代理分析實作階段的工作記錄，產生結構化 JSON 摘要。輸出格式由 `CheckPlanSchema`（`check-plan-schema.ts`）定義：
 
 - **Task Summary**：實作內容的一段式摘要
 - **Implementation Plan**：採用的實作方法
@@ -53,11 +53,11 @@ Planner 代理分析實作階段的工作記錄，產生結構化 JSON 摘要。
 
 1. **System prompt 注入**：`buildOutputFormatPrompt()`（`factory.ts:50-59`）在 system prompt 末尾附加 JSON 格式範例，引導 LLM 進行 pattern completion
 2. **Provider 層級**：`createOutputFormatPayloadHook()`（`factory.ts:131-139`）對 OpenAI 相容 provider 注入 `response_format: {type: "json_object"}`
-3. **驗證 + 重試**：`promptWithValidation()`（`output-validation.ts:86-114`）使用 TypeBox `Value.Errors` 驗證輸出，失敗時附帶欄位級錯誤回饋進行重試（最多 3 次）
+3. **驗證 + 重試**：`promptWithValidation()`（`output-validation.ts:95-123`）使用 TypeBox `Value.Errors` 驗證輸出，失敗時附帶欄位級錯誤回饋進行重試（最多 3 次）
 
 驗證失敗返回 `{ ok: false, errors, rawText }` 結構化錯誤；成功返回型別安全的 `CheckPlan` 物件。
 
-來源：`packages/core/src/orchestrator/agent-mode.ts:191-241`、`packages/core/src/orchestrator/check-plan-schema.ts:3-14`、`packages/core/src/agent/output-validation.ts:86-114`
+來源：`packages/core/src/orchestrator/agent-mode.ts:191-241`、`packages/core/src/agent/output-validation.ts:95-123`
 
 ### Phase 3: 驗證與修復循環（Verify & Fix Loop）
 
@@ -71,17 +71,17 @@ Planner 代理分析實作階段的工作記錄，產生結構化 JSON 摘要。
 循環機制（`agent-mode.ts:298-337`）：
 
 1. Verifier 執行所有待處理的驗證項目，以 `[PASS]` / `[FAIL]` 行回報結果
-2. 解析結果時擷取 `[FAIL]` 行後的錯誤輸出（`parseResults`，`agent-mode.ts:450-484`）
+2. 解析結果時擷取 `[FAIL]` 行後的錯誤輸出
 3. 若全部通過 → 循環結束；若存在失敗：
-   a. 將失敗描述的錯誤與原始指令重新關聯（`agent-mode.ts:319-322`）
+   a. 將失敗描述的錯誤與原始指令重新關聯
    b. 將失敗診斷作為 prompt 發送給 Fixer
    c. Fixer 實施修復，將命令作為待處理項目進行重新測試
    d. 重複最多 3 次（`MAX_FIX_RETRIES = 3`，`agent-mode.ts:64`）
 4. 若超過重試上限後仍有失敗項 → phase 失敗
 
-修復完成後自動提交為 `jovaltus: agent mode verification fixes`。
+修復完成後自動提交為 `jovaltus: agent mode verification fixes`（`agent-mode.ts:262`）。
 
-來源：`packages/core/src/orchestrator/agent-mode.ts:244-297, 40-65`
+來源：`packages/core/src/orchestrator/agent-mode.ts:244-337`
 
 ### Phase 4: 簡化（Simplification）
 
@@ -91,18 +91,18 @@ Planner 代理分析實作階段的工作記錄，產生結構化 JSON 摘要。
 
 執行流程：
 
-1. 找到實作 commit：`git log --grep='^jovaltus: agent mode implementation$'`
-2. 計算從 `implCommit^` 到 `HEAD` 的淨差異，使用 `CleanDiffManager`
+1. 找到實作 commit：`git log --grep='^jovaltus: agent mode implementation$'`（`agent-mode.ts:348`）
+2. 計算從 `implCommit^` 到 `HEAD` 的淨差異，使用 `CleanDiffManager`（`agent-mode.ts:345`）
 3. 將差異輸入給 simplifier 代理，並指示其進行簡化
-4. **Phase 4b: 簡化後重新驗證** — 使用全新的 verifier + fixer 代理對原始驗證項目清單重新執行 `verifyLoop`，以確保簡化未引入回歸（`agent-mode.ts:273-297`）
+4. **Phase 4b: 簡化後重新驗證** — 使用全新的 verifier + fixer 代理對原始驗證項目清單重新執行 `verifyLoop`（`agent-mode.ts:273-297`），以確保簡化未引入回歸
 
-來源：`packages/core/src/orchestrator/agent-mode.ts:340-378, 55-63, 146-150`
+來源：`packages/core/src/orchestrator/agent-mode.ts:340-378`
 
 ## 中斷訊號傳播（AbortSignal Propagation）
 
-`AbortSignal` 在整條流水線中傳播：`run()` → 每個 phase method → `runAgent()`。在 `runAgent()` 內部（`agent-mode.ts:383-408`），訊號以 `addEventListener('abort', handler)` 監聽，觸發 `agent.abort()`。監聽器在 `finally` 區塊中移除，確保不會洩漏。
+`AbortSignal` 在整條流水線中傳播：`run()` → 每個 phase method → `runAgent()`。在 `runAgent()` 內部（`agent-mode.ts:382-408`），訊號以 `addEventListener('abort', handler)` 監聽，觸發 `agent.abort()`。監聽器在 `finally` 區塊中移除，確保不會洩漏。
 
-來源：`packages/core/src/orchestrator/agent-mode.ts:396-406`
+來源：`packages/core/src/orchestrator/agent-mode.ts:382-408`
 
 ## 事件系統
 
@@ -117,9 +117,9 @@ Planner 代理分析實作階段的工作記錄，產生結構化 JSON 摘要。
 | `tool_result`  | 工具呼叫完成時   | `phase, toolName, isError`   |
 | `error`        | 階段失敗時       | `phase, message`             |
 
-事件監聽器的錯誤會被靜默吞沒，防止單一監聽器的崩潰影響整體流水線（`agent-mode.ts:550`）。
+事件監聽器的錯誤會被靜默吞沒，防止單一監聽器的崩潰影響整體流水線（`agent-mode.ts:547-554`）。
 
-來源：`packages/core/src/orchestrator/types.ts:41-57`、`packages/core/src/orchestrator/agent-mode.ts:125-129, 411-447, 547-555`
+來源：`packages/core/src/orchestrator/types.ts:41-57`、`packages/core/src/orchestrator/agent-mode.ts:125-129, 547-554`
 
 ## 系統提示（System Prompts）
 
@@ -131,9 +131,9 @@ Planner 代理分析實作階段的工作記錄，產生結構化 JSON 摘要。
 - `FIXER_PROMPT`（修復器，`agent-mode.ts:47-53`）
 - `SIMPLIFIER_PROMPT`（簡化器，`agent-mode.ts:55-62`）
 
-此設計實現了**透過配置定義行為**：代理角色由系統提示 + 工具預設組定義，而非硬編碼邏輯。
+建構子覆蓋邏輯：`agent-mode.ts:115-119`。
 
-來源：`packages/core/src/orchestrator/agent-mode.ts:111-121`
+此設計實現了**透過配置定義行為**：代理角色由系統提示 + 工具預設組定義，而非硬編碼邏輯。
 
 ## 模組邊界
 
@@ -150,4 +150,4 @@ Orchestrator 模組依賴：
 
 Orchestrator **不依賴**於 VS Code、model/ 模組或 planner 模組。它不直接呼叫模型 — 所有 LLM 互動均透過 Agent API（`prompt()` → `waitForIdle()`）進行。
 
-來源：`packages/core/src/orchestrator/agent-mode.ts:1-10`
+來源：`packages/core/src/orchestrator/agent-mode.ts:1-13`

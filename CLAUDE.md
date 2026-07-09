@@ -17,16 +17,16 @@
 
 # Project Documentation Index
 
-- `docs/features/chat-interface.md` — Chat panel: send, streaming, phase display, tool call notifications
+- `docs/features/chat-interface.md` — Chat panel: send, streaming markdown, tool call cards, phase display, model selector, CSP, theme adaptation
 - `docs/features/agent-operations.md` — File read/write/edit and bash execution (wired to orchestrator pipeline)
-- `docs/features/configuration.md` — VS Code settings for models and providers
+- `docs/features/configuration.md` — VS Code settings for models, providers, API key SecretStorage, model switching
 - `docs/architecture/core-package.md` — Core engine: agent factory, structured output, model abstraction, config layering, worktree/diff/planner/orchestrator infrastructure
 - `docs/architecture/extension-package.md` — Extension: activation, message protocol (6 event types), webview architecture, core integration
 - `docs/architecture/tool-system.md` — Tool definitions, presets, ToolRegistry, directory guard
 - `docs/architecture/orchestrator-pipeline.md` — Agent mode 4-stage pipeline: impl → plan → verify & fix → simplify → reverify
 - `docs/principles/naming-conventions.md` — File/module/class/function naming
 - `docs/principles/coding-style.md` — TS strictness, import order, export conventions
-- `docs/principles/testing-conventions.md` — Vitest patterns, temp-dir isolation, mock strategy
+- `docs/principles/testing-conventions.md` — Vitest patterns, temp-dir isolation, mock strategy, jsdom for webview tests
 - `docs/principles/error-handling.md` — ModelError codes, HTTP mapping, provider error classification
 - `docs/jovaltus-proposal.md` — Original product proposal and design vision
 - `README.md` — Project overview

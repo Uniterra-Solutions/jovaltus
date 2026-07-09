@@ -38,14 +38,14 @@
 
 ## 模組邊界
 
-- **Agent 模組**：代理實例化、生命週期管理，以及結構化輸出驗證。對外暴露 `createAgent`、`createModelRegistry`、`ToolRegistry`、`restrictToDirectory`、`promptWithValidation`、`validateOutput`、`extractJsonFromText`、`generateJsonExample`、`buildValidationRetryPrompt`。來源：`packages/core/src/agent/factory.ts:98-131`、`packages/core/src/agent/output-validation.ts:10-123`。
-- **Config 模組**：配置類型定義、預設值、合併邏輯、上下文視窗自動偵測。對外僅暴露 `ConfigManager`、`DEFAULT_CONFIG`、`resolveContextWindow`。
-- **Model 模組**：低層次模型存取抽象。對外僅暴露 `createModelClient`、`ModelError`、`OpenAIProvider`、`AnthropicProvider`。
-- **Tools 模組**：內建工具定義與能力分級預設組合。對外僅暴露四個工具常數與三組預設工具集合。
-- **Worktree 模組**：Git worktree 生命週期管理（create, list, get, merge, remove）。支援分支衝突檢測、dirty worktree 保護、合併衝突結構化回傳。對外僅暴露 `WorktreeManager`、`WorktreeError`、相關類型。來源：`packages/core/src/worktree/manager.ts:8-117`。
-- **Diff 模組**：跨層級 clean diff 計算（Worker/Batch/Spec 三級），計算起點 vs 終點的差異，不包含中間修改痕跡。支援檔案過濾、rename 檢測、50KB diff 截斷。對外僅暴露 `CleanDiffManager`、`DiffError`、相關類型。來源：`packages/core/src/diff/manager.ts:9-111`。
-- **Planner 模組**：任務排程核心邏輯，使用 Kahn 拓撲排序演算法配合檔案重疊感知的批次分組。支援 explicit dependency、output dependency、循環依賴檢測（三色 DFS）。純邏輯模組，無 I/O 或 Git 依賴。對外僅暴露 `PlannerCore`、`PlannerError`、相關類型。來源：`packages/core/src/planner/core.ts:4-141`。
-- **Orchestrator 模組**：事件驅動的四階段代理流水線（實作 → 規劃 → 驗證與修復 → 簡化 → 重新驗證），使用乾淨的 git commit 邊界與 `CleanDiffManager` 進行階段間淨差異計算。分離 coordinator（驗證器、規劃器）與 worker（實作器、修復器、簡化器）角色。支援 AbortSignal 傳播、錯誤輸出擷取及指令透過 verify-fix 循環的恢復。對外僅暴露 `AgentModeOrchestrator`、相關類型。來源：`packages/core/src/orchestrator/agent-mode.ts:1-567`。詳見 `docs/architecture/orchestrator-pipeline.md`。
+- **Agent 模組**：代理實例化、生命週期管理，以及結構化輸出驗證。對外暴露 `createAgent`、`createModelRegistry`、`ToolRegistry`、`restrictToDirectory`、`promptWithValidation`、`validateOutput`、`extractJsonFromText`、`generateJsonExample`。來源：`packages/core/src/agent/factory.ts:98-131`、`packages/core/src/agent/output-validation.ts:10-123`。
+- **Config 模組**：配置類型定義、預設值、合併邏輯、上下文視窗自動偵測。對外暴露 `ConfigManager`、`DEFAULT_CONFIG`、`resolveContextWindow`、`discoverContextWindow`。
+- **Model 模組**：低層次模型存取抽象。對外暴露 `createModelClient`、`ModelError`、`OpenAIProvider`、`AnthropicProvider`。
+- **Tools 模組**：內建工具定義與能力分級預設組合。對外暴露四個工具常數與三組預設工具集合。
+- **Worktree 模組**：Git worktree 生命週期管理（create, list, get, merge, remove）。支援分支衝突檢測、dirty worktree 保護、合併衝突結構化回傳。對外暴露 `WorktreeManager`、`WorktreeError`、相關類型。來源：`packages/core/src/worktree/manager.ts`。
+- **Diff 模組**：跨層級 clean diff 計算（Worker/Batch/Spec 三級），計算起點 vs 終點的差異，不包含中間修改痕跡。支援檔案過濾、rename 檢測、50KB diff 截斷。對外暴露 `CleanDiffManager`、`DiffError`、相關類型。來源：`packages/core/src/diff/manager.ts`。
+- **Planner 模組**：任務排程核心邏輯，使用 Kahn 拓撲排序演算法配合檔案重疊感知的批次分組。支援 explicit dependency、output dependency、循環依賴檢測（三色 DFS）。純邏輯模組，無 I/O 或 Git 依賴。對外暴露 `PlannerCore`、`PlannerError`、相關類型。來源：`packages/core/src/planner/core.ts`。
+- **Orchestrator 模組**：事件驅動的四階段代理流水線（實作 → 規劃 → 驗證與修復 → 簡化 → 重新驗證），使用乾淨的 git commit 邊界與 `CleanDiffManager` 進行階段間淨差異計算。分離 coordinator（驗證器、規劃器）與 worker（實作器、修復器、簡化器）角色。支援 AbortSignal 傳播、錯誤輸出擷取及指令透過 verify-fix 循環的恢復。對外暴露 `AgentModeOrchestrator`、`CheckPlanSchema`、相關類型。來源：`packages/core/src/orchestrator/agent-mode.ts:1-598`。詳見 `docs/architecture/orchestrator-pipeline.md`。
 
 ## 公共 API 約定
 

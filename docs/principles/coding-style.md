@@ -1,6 +1,6 @@
 # 程式碼風格 (Coding Style)
 
-來源：`tsconfig.base.json`、`eslint.config.mjs`、`.prettierrc`，以及 `packages/core/src/` 原始碼
+來源：`tsconfig.base.json`、`eslint.config.mjs`、`.prettierrc`，以及 `packages/core/src/`、`packages/extension/src/` 原始碼
 
 ## TypeScript 嚴格模式
 
@@ -36,7 +36,7 @@ ESLint 層級附加規則（`eslint.config.mjs:29-35`）：
 **範例**（`agent/factory.ts:1-13`）：
 
 ```typescript
-import { createModels, createProvider, ... } from '@earendil-works/pi-ai';
+import { createModels, createProvider } from '@earendil-works/pi-ai';
 import { Agent } from '@earendil-works/pi-agent-core';
 
 import type { JovaltusConfig, ModelConfig } from '../config/types.js';
@@ -97,4 +97,7 @@ import { ConfigManager } from './manager.js'; // ✅ .js 副檔名
 - 管理 AbortController 生命週期（`OpenAIProvider`、`AnthropicProvider`）
 - 封裝配置解析狀態（`ConfigManager`）
 - 管理動態工具註冊表（`ToolRegistry`）
-- 自訂錯誤型別（`ModelError`）
+- 實現 WebviewViewProvider 介面（`ChatPanelProvider`）
+- 封裝 SecretStorage 操作（`JovaltusSecrets`）
+- 橋接配置 API（`VSCodeConfigProvider`）
+- 自訂錯誤型別（`ModelError`、`DiffError`、`WorktreeError`、`PlannerError`）

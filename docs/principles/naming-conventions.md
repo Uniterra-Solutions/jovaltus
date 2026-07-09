@@ -1,6 +1,6 @@
 # 命名慣例 (Naming Conventions)
 
-來源：`packages/core/src/` 全體原始碼
+來源：`packages/core/src/`、`packages/extension/src/` 全體原始碼
 
 ## 檔案命名
 
@@ -14,6 +14,9 @@
 - `openai-provider.ts` — OpenAI 模型提供者
 - `context-window.ts` — 上下文視窗解析邏輯
 - `restrict-directory.ts` — 目錄限制守衛
+- `chat-panel.ts` — VS Code 聊天面板提供者
+- `config-provider.ts` — VS Code 配置橋接
+- `chat-adapter.ts` — assistant-ui adapter
 
 測試檔案以 `.test.ts` 後綴命名，置於 `src/__tests__/` 目錄下，與原始碼共置（colocated）。
 
@@ -27,8 +30,9 @@
 
 - `JovaltusConfig` — 系統配置介面（`config/types.ts:12`）
 - `ModelClient` — 模型客戶端介面（`model/client.ts:6`）
-- `AgentRole` — 代理角色型別別名（`agent/types.ts:3`）
+- `AgentRole` — 代理角色型別別名（`agent/types.ts:4`）
 - `ModelErrorCode` — 錯誤碼聯合型別（`model/errors.ts:1`）
+- `ConfigProvider` — 配置提供者抽象介面（`config/types.ts:19`）
 
 所有介面屬性均標記為 `readonly`，確保配置物件的不變性。
 
@@ -36,11 +40,12 @@
 
 類別使用 **PascalCase**，常用後綴表達語義：
 
-- `Provider` — 模型提供者封裝：`OpenAIProvider`、`AnthropicProvider`、`ChatPanelProvider`、`VSCodeConfigProvider`
+- `Provider` — 模型提供者封裝或配置橋接：`OpenAIProvider`、`AnthropicProvider`、`ChatPanelProvider`、`VSCodeConfigProvider`
 - `Manager` — 資源與配置管理：`ConfigManager`、`CleanDiffManager`、`WorktreeManager`
 - `Orchestrator` — 多階段流水線編排：`AgentModeOrchestrator`
 - `Registry` — 資源註冊表：`ToolRegistry`
 - `Core` — 純邏輯核心：`PlannerCore`
+- `Secrets` — 安全儲存操作：`JovaltusSecrets`
 - `Error` — 自訂錯誤：`ModelError`、`DiffError`、`WorktreeError`、`PlannerError`
 
 **理由**：後綴提供即時的語義提示，降低閱讀程式碼時的理解成本。
@@ -53,9 +58,9 @@
 
 **範例**：
 
-- `createAgent()` — 建立代理實例（`agent/factory.ts:85`）
+- `createAgent()` — 建立代理實例（`agent/factory.ts:98`）
 - `createModelClient()` — 建立模型客戶端（`model/client.ts:13`）
-- `createModelRegistry()` — 建立模型註冊表（`agent/factory.ts:53`）
+- `createModelRegistry()` — 建立模型註冊表（`agent/factory.ts:66`）
 - `resolveContextWindow()` — 解析上下文視窗（`config/context-window.ts:32`）
 - `restrictToDirectory()` — 建立目錄限制守衛（`agent/restrict-directory.ts:19`）
 
@@ -65,8 +70,8 @@
 
 **範例**：
 
-- `DEFAULT_CONTEXT_WINDOW` — 預設上下文視窗大小（`config/context-window.ts:1`）
-- `MAX_BYTES` — 輸出位元組上限（`agent/tools/bash.ts:7`）
+- `DEFAULT_CONTEXT_WINDOW` — 預設上下文視窗大小（`config/context-window.ts`）
+- `MAX_BYTES` — 輸出位元組上限（`agent/tools/bash.ts`）
 - `PATH_KEYS` — 路徑參數鍵名集合（`agent/restrict-directory.ts:4`）
 
 工具物件常數使用 **camelCase** 命名（如同函式）：

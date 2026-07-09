@@ -1,6 +1,6 @@
 # 測試慣例 (Testing Conventions)
 
-來源：`packages/core/src/__tests__/` 所有測試檔案、`vitest.config.ts`
+來源：`packages/core/src/__tests__/`、`packages/extension/src/__tests__/`、`packages/extension/src/webview/__tests__/`、`vitest.config.ts`
 
 ## 測試框架
 
@@ -20,16 +20,16 @@ export default defineConfig({
 
 ## 測試檔案位置
 
-測試檔案與原始碼共置（colocated）於 `src/__tests__/` 目錄下，檔案命名為 `{module-name}.test.ts`，對應被測試的模組。
+測試檔案與原始碼共置（colocated）於 `src/__tests__/` 目錄下，檔案命名為 `{module-name}.test.ts`，對應被測試的模組。webview 測試檔案置於 `src/webview/__tests__/`。
 
 **範例**：
 
 - `config.test.ts` — 對應 `config/manager.ts`
 - `tools.test.ts` — 對應 `agent/tools/*.ts`
 - `tool-registry.test.ts` — 對應 `agent/tool-registry.ts`
-- `restrict-directory.test.ts` — 對應 `agent/restrict-directory.ts`
-- `model-errors.test.ts` — 對應 `model/errors.ts`
-- `model-client.test.ts` — 對應 `model/client.ts`
+- `secrets.test.ts` — 對應 `secrets.ts`
+- `chat-adapter.test.ts` — 對應 `chat-adapter.ts`
+- `vscode-bridge.test.ts` — 對應 `vscode-bridge.ts`
 
 ## 隔離原則
 
@@ -70,6 +70,20 @@ function provider(map: Record<string, string | number>): ConfigProvider {
 ```
 
 僅對網路相依的測試使用 fake/stub，本地可測試的邏輯（檔案系統、配置解析、錯誤分類）使用真實實作。
+
+## Webview 測試環境
+
+Webview 測試使用 `@vitest-environment jsdom` 標記，在測試檔案頂端宣告：
+
+```typescript
+/**
+ * @vitest-environment jsdom
+ */
+```
+
+**理由**：Webview 元件（chat-adapter、vscode-bridge）依賴 browser API（`window.addEventListener`、`acquireVsCodeApi`、`postMessage`），需要 DOM 模擬環境。
+
+Webview 測試使用 `vi.stubGlobal()` mock `acquireVsCodeApi`，並透過 `window.postMessage()` 模擬事件流。
 
 ## 斷言慣例
 
