@@ -34,6 +34,13 @@ export {
   READ_WRITE_TOOLS,
   VERIFY_TOOLS,
 } from './agent/tools/index.js';
+export {
+  validateOutput,
+  generateJsonExample,
+  extractJsonFromText,
+  promptWithValidation,
+} from './agent/output-validation.js';
+export type { StructuredOutputResult } from './agent/output-validation.js';
 
 // Worktree
 export { WorktreeManager } from './worktree/manager.js';
@@ -64,6 +71,7 @@ export type { TaskInput, TaskNode, Batch, PlanResult, PlannerErrorCode } from '.
 
 // Orchestrator
 export { AgentModeOrchestrator } from './orchestrator/agent-mode.js';
+export { CheckPlanSchema } from './orchestrator/check-plan-schema.js';
 export type {
   PhaseName,
   PhaseResult,

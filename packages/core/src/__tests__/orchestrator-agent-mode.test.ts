@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { AgentModeOrchestrator } from '../orchestrator/agent-mode.js';
+import { CheckPlanSchema } from '../orchestrator/check-plan-schema.js';
+import { Value } from '@sinclair/typebox/value';
 import type {
   PhaseName,
   PhaseResult,
   AgentModeResult,
   AgentModeEvent,
   VerificationItem,
-  CheckPlan,
 } from '../orchestrator/types.js';
 import type { JovaltusConfig } from '../config/types.js';
 
@@ -23,10 +24,6 @@ function callPrivate(method: string, ...args: unknown[]): unknown {
   return (
     AgentModeOrchestrator.prototype as unknown as Record<string, (...a: unknown[]) => unknown>
   )[method]!(...args);
-}
-
-function asstMsg(text: string): readonly unknown[] {
-  return text ? [{ role: 'assistant', content: [{ type: 'text', text }] }] : [];
 }
 
 describe('AgentModeOrchestrator', () => {
@@ -59,50 +56,49 @@ describe('AgentModeOrchestrator', () => {
     });
   });
 
-  describe('parseCheckPlan', () => {
-    it('parses full planner output', () => {
-      const result = callPrivate(
-        'parseCheckPlan',
-        asstMsg(`## Task Summary
-Added validation to the form.
-
-## Implementation Plan
-1. Read form component
-2. Added Zod validation
-3. Updated tests
-
-## Acceptance Criteria
-- All fields validated
-- Error messages user-friendly
-- Existing tests pass
-
-## Affected Modules
-- src/components/RegisterForm.tsx
-- src/validation/user.ts
-
-## Verification Items
-
-1. **Description**: Run unit tests
-   **Command**: \`npm test -- RegisterForm\`
-
-2. **Description**: Type check passes
-   **Command**: \`npx tsc --noEmit\``),
-      ) as CheckPlan;
-
-      expect(result.taskSummary).toBe('Added validation to the form.');
-      expect(result.acceptanceCriteria).toHaveLength(3);
-      expect(result.affectedModules).toHaveLength(2);
-      expect(result.verificationItems).toHaveLength(2);
-      expect(result.verificationItems[0]).toEqual({
-        description: 'Run unit tests',
-        command: 'npm test -- RegisterForm',
-      });
+  describe('CheckPlanSchema', () => {
+    it('validates a complete check plan', () => {
+      const valid = {
+        taskSummary: 'Added validation to the form.',
+        implementationPlan: 'Read form component, added Zod validation, updated tests.',
+        acceptanceCriteria: ['All fields validated', 'Error messages user-friendly'],
+        affectedModules: ['src/components/RegisterForm.tsx'],
+        verificationItems: [
+          { description: 'Run unit tests', command: 'npm test -- RegisterForm' },
+          { description: 'Type check passes', command: 'npx tsc --noEmit' },
+        ],
+      };
+      expect(Value.Check(CheckPlanSchema, valid)).toBe(true);
     });
 
-    it('returns empty plan for empty input', () => {
-      const r = callPrivate('parseCheckPlan', []) as CheckPlan;
-      expect(r.taskSummary).toBe('');
-      expect(r.verificationItems).toHaveLength(0);
+    it('rejects missing required fields', () => {
+      expect(Value.Check(CheckPlanSchema, {})).toBe(false);
+    });
+
+    it('rejects wrong types', () => {
+      expect(
+        Value.Check(CheckPlanSchema, {
+          taskSummary: 123,
+          implementationPlan: 'ok',
+          acceptanceCriteria: 'not-an-array',
+          affectedModules: [],
+          verificationItems: [],
+        }),
+      ).toBe(false);
+    });
+
+    it('rejects invalid verification items', () => {
+      const invalid = {
+        taskSummary: 'Test',
+        implementationPlan: 'Plan',
+        acceptanceCriteria: [],
+        affectedModules: [],
+        verificationItems: [
+          { description: 'missing command' },
+          { notDescription: 'missing description', notCommand: 'missing command' },
+        ],
+      };
+      expect(Value.Check(CheckPlanSchema, invalid)).toBe(false);
     });
   });
 

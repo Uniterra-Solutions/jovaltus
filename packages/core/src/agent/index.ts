@@ -11,3 +11,10 @@ export {
   READ_WRITE_TOOLS,
   VERIFY_TOOLS,
 } from './tools/index.js';
+export {
+  validateOutput,
+  generateJsonExample,
+  extractJsonFromText,
+  promptWithValidation,
+} from './output-validation.js';
+export type { StructuredOutputResult } from './output-validation.js';

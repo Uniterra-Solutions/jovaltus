@@ -7,8 +7,15 @@ import type { BeforeToolCallContext, BeforeToolCallResult } from '@earendil-work
 import type { AssistantMessage } from '@earendil-works/pi-ai';
 import { ToolRegistry } from '../agent/tool-registry.js';
 import { readTool, writeTool, editTool, bashTool } from '../agent/tools/index.js';
+import { Type } from '@sinclair/typebox';
 import { createAgent } from '../agent/factory.js';
 import type { JovaltusConfig } from '../config/types.js';
+import {
+  extractJsonFromText,
+  validateOutput,
+  generateJsonExample,
+  buildValidationRetryPrompt,
+} from '../agent/output-validation.js';
 
 const MSG: AssistantMessage = {
   role: 'assistant',
@@ -318,5 +325,204 @@ describe('createAgent — penetration', () => {
       TEST_CONFIG,
     );
     expect(agent.state.systemPrompt).toBe('Sys');
+  });
+});
+
+// ── Issue #18: Structured Output — penetration ────────────────────────
+
+const CheckPlanSchema = Type.Object({
+  taskSummary: Type.String(),
+  implementationPlan: Type.String(),
+  acceptanceCriteria: Type.Array(Type.String()),
+  affectedModules: Type.Array(Type.String()),
+  verificationItems: Type.Array(
+    Type.Object({ description: Type.String(), command: Type.String() }),
+  ),
+});
+
+describe('extractJsonFromText — penetration', () => {
+  it('handles escaped quotes inside JSON strings without breaking brace tracking', () => {
+    const text = '{"msg":"hello \\"world\\"","ok":true}';
+    const result = extractJsonFromText(text);
+    expect(result).not.toBeNull();
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- guarded by expect above
+    const parsed = JSON.parse(result!) as { msg: string; ok: boolean };
+    expect(parsed.msg).toBe('hello "world"');
+    expect(parsed.ok).toBe(true);
+  });
+
+  it('handles double-escaped backslashes in strings', () => {
+    const text = '{"path":"C:\\\\Users\\\\test"}';
+    const result = extractJsonFromText(text);
+    expect(result).not.toBeNull();
+    expect((JSON.parse(result ?? '{}') as { path: string }).path).toBe('C:\\Users\\test');
+  });
+
+  it('handles deeply nested JSON (100 levels)', () => {
+    let deep = '{"v":0}';
+    for (let i = 0; i < 100; i++) deep = `{"nested":${deep}}`;
+    const result = extractJsonFromText(deep);
+    expect(result).not.toBeNull();
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- guarded by expect
+    expect(result!.startsWith('{')).toBe(true);
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- guarded by expect
+    expect(result!.endsWith('}')).toBe(true);
+  });
+
+  it('extracts first JSON object when multiple exist', () => {
+    const text = '{"first":1} some text {"second":2}';
+    const result = extractJsonFromText(text);
+    expect(result).toBe('{"first":1}');
+  });
+
+  it('returns null for text with opening brace but no closing brace', () => {
+    const text = 'here is an opening { but never closed';
+    expect(extractJsonFromText(text)).toBeNull();
+  });
+
+  it('extracts brace-delimited text even when not valid JSON', () => {
+    // The extractor only tracks brace depth, not JSON validity.
+    // "{a, b, c}" has balanced braces and gets extracted.
+    const text = 'The set {a, b, c} is useful.';
+    expect(extractJsonFromText(text)).toBe('{a, b, c}');
+  });
+
+  it('handles unicode in JSON strings', () => {
+    const text = '{"greeting":"你好世界 🌍","emoji":"🎉"}';
+    const result = extractJsonFromText(text);
+    expect(result).not.toBeNull();
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- guarded by expect
+    const parsed = JSON.parse(result!) as { greeting: string; emoji: string };
+    expect(parsed.greeting).toBe('你好世界 🌍');
+    expect(parsed.emoji).toBe('🎉');
+  });
+
+  it('handles text with markdown code fences around JSON', () => {
+    const text = '```json\n{"key":"value"}\n```';
+    const result = extractJsonFromText(text);
+    expect(result).toBe('{"key":"value"}');
+  });
+
+  it('returns null for empty input', () => {
+    expect(extractJsonFromText('')).toBeNull();
+    expect(extractJsonFromText('   ')).toBeNull();
+  });
+});
+
+describe('validateOutput — penetration', () => {
+  it('allows extra fields not defined in schema (TypeBox default)', () => {
+    const result = validateOutput(
+      '{"taskSummary":"t","implementationPlan":"i","acceptanceCriteria":[],"affectedModules":[],"verificationItems":[],"extraField":"unexpected"}',
+      CheckPlanSchema,
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it('rejects null for a required string field', () => {
+    const result = validateOutput(
+      '{"taskSummary":null,"implementationPlan":"i","acceptanceCriteria":[],"affectedModules":[],"verificationItems":[]}',
+      CheckPlanSchema,
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.some((e) => e.includes('taskSummary'))).toBe(true);
+    }
+  });
+});
+
+describe('createAgent — outputSchema integration', () => {
+  it('injects JSON format instructions into system prompt when outputSchema set', () => {
+    const agent = createAgent(
+      {
+        role: 'coordinator',
+        systemPrompt: 'You are a planner.',
+        tools: [readTool],
+        outputSchema: CheckPlanSchema,
+      },
+      TEST_CONFIG,
+    );
+    expect(agent.state.systemPrompt).toContain('Output Format');
+    expect(agent.state.systemPrompt).toContain('taskSummary');
+    expect(agent.state.systemPrompt).toContain('verificationItems');
+    expect(agent.state.systemPrompt).toContain('```json');
+  });
+
+  it('does NOT inject JSON format when outputSchema is not set (backward compat)', () => {
+    const agent = createAgent(
+      { role: 'coordinator', systemPrompt: 'Basic prompt.', tools: [readTool] },
+      TEST_CONFIG,
+    );
+    expect(agent.state.systemPrompt).not.toContain('Output Format');
+    expect(agent.state.systemPrompt).not.toContain('```json');
+    expect(agent.state.systemPrompt).toBe('Basic prompt.');
+  });
+
+  it('appends JSON format after context in system prompt', () => {
+    const agent = createAgent(
+      {
+        role: 'coordinator',
+        systemPrompt: 'SYSTEM.',
+        context: { filePaths: ['src/a.ts'] },
+        tools: [readTool],
+        outputSchema: CheckPlanSchema,
+      },
+      TEST_CONFIG,
+    );
+    const sp = agent.state.systemPrompt;
+    const fmtIdx = sp.indexOf('Output Format');
+    const sysIdx = sp.indexOf('SYSTEM.');
+    const ctxIdx = sp.indexOf('src/a.ts');
+    // Order: system prompt → output format → context (factory.ts L112-116)
+    expect(sysIdx).toBeLessThan(fmtIdx);
+    expect(fmtIdx).toBeLessThan(ctxIdx);
+  });
+
+  it('thinkingLevel stays medium when outputSchema is set (not forced off)', () => {
+    // Evidence: DeepSeek & GLM-5 docs show no incompatibility between
+    // response_format: json_object and thinking/reasoning mode.
+    // thinkingLevel should remain 'medium' for all providers.
+    const agent = createAgent(
+      {
+        role: 'coordinator',
+        systemPrompt: 'p',
+        tools: [readTool],
+        outputSchema: CheckPlanSchema,
+      },
+      TEST_CONFIG,
+    );
+    expect(agent.state.thinkingLevel).toBe('medium');
+  });
+});
+
+describe('generateJsonExample — robustness', () => {
+  it('generates an example with all required keys present', () => {
+    const example = generateJsonExample(CheckPlanSchema);
+    const parsed = JSON.parse(example) as Record<string, unknown>;
+    expect(parsed).toHaveProperty('taskSummary');
+    expect(parsed).toHaveProperty('implementationPlan');
+    expect(parsed).toHaveProperty('acceptanceCriteria');
+    expect(parsed).toHaveProperty('affectedModules');
+    expect(parsed).toHaveProperty('verificationItems');
+  });
+
+  it('generates validatable example for CheckPlanSchema', () => {
+    const example = generateJsonExample(CheckPlanSchema);
+    const result = validateOutput(example, CheckPlanSchema);
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe('buildValidationRetryPrompt — content', () => {
+  it('includes all provided errors', () => {
+    const errors = ['/taskSummary: Expected string', '/verificationItems: Expected array'];
+    const prompt = buildValidationRetryPrompt(errors, CheckPlanSchema);
+    expect(prompt).toContain('/taskSummary: Expected string');
+    expect(prompt).toContain('/verificationItems: Expected array');
+  });
+
+  it('always includes expected JSON format', () => {
+    const prompt = buildValidationRetryPrompt(['/taskSummary: Expected string'], CheckPlanSchema);
+    expect(prompt).toContain('```json');
+    expect(prompt).toContain('Expected format');
   });
 });

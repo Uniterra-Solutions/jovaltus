@@ -11,6 +11,8 @@ import { Agent } from '@earendil-works/pi-agent-core';
 
 import type { JovaltusConfig, ModelConfig } from '../config/types.js';
 import type { CreateAgentOptions } from './types.js';
+import type { TSchema } from '@sinclair/typebox';
+import { generateJsonExample } from './output-validation.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -43,6 +45,17 @@ function formatContext(ctx: CreateAgentOptions['context']): string {
     p.push('## Code Ranges\n' + ctx.codeRanges.map((r) => `- ${r}`).join('\n'));
   if (ctx.diff) p.push('## Diff Context\n```diff\n' + ctx.diff + '\n```');
   return p.length ? '\n\n' + p.join('\n\n') : '';
+}
+
+function buildOutputFormatPrompt(schema: TSchema): string {
+  const example = generateJsonExample(schema);
+  return (
+    '\n\n## Output Format\n' +
+    'Respond with a single JSON object matching this structure. Do not include markdown fences or explanatory text:\n\n' +
+    '```json\n' +
+    example +
+    '\n```'
+  );
 }
 
 // ── Public API ───────────────────────────────────────────────────────
@@ -95,7 +108,12 @@ export function createAgent(options: CreateAgentOptions, config: JovaltusConfig)
     );
   }
 
-  const systemPrompt = options.systemPrompt + formatContext(options.context);
+  // Assemble system prompt, optionally appending JSON output format
+  let systemPrompt = options.systemPrompt;
+  if (options.outputSchema) {
+    systemPrompt += buildOutputFormatPrompt(options.outputSchema);
+  }
+  systemPrompt += formatContext(options.context);
 
   return new Agent({
     initialState: {
@@ -106,5 +124,16 @@ export function createAgent(options: CreateAgentOptions, config: JovaltusConfig)
       messages: [],
     },
     streamFn: models.streamSimple.bind(models),
+    onPayload: options.outputSchema ? createOutputFormatPayloadHook(provider) : undefined,
+  });
+}
+
+function createOutputFormatPayloadHook(
+  provider: 'anthropic' | 'openai',
+): (payload: unknown) => unknown {
+  if (provider !== 'openai') return (p) => p;
+  return (payload) => ({
+    ...(payload as Record<string, unknown>),
+    response_format: { type: 'json_object' as const },
   });
 }

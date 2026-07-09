@@ -3,9 +3,11 @@ import type { Agent } from '@earendil-works/pi-agent-core';
 import type { JovaltusConfig } from '../config/types.js';
 import { createAgent } from '../agent/factory.js';
 import type { CreateAgentOptions } from '../agent/types.js';
+import { promptWithValidation } from '../agent/output-validation.js';
 import { READ_ONLY_TOOLS, READ_WRITE_TOOLS, VERIFY_TOOLS } from '../agent/tools/index.js';
 import { CleanDiffManager } from '../diff/manager.js';
 import { execGit } from '../git.js';
+import { CheckPlanSchema } from './check-plan-schema.js';
 import type {
   AgentModeEvent,
   AgentModeOptions,
@@ -33,30 +35,7 @@ Your job is to:
 4. Identify affected modules by searching the codebase
 5. Produce a check plan with specific verification commands
 
-Output format (use exactly this structure):
-
-## Task Summary
-[One paragraph summarizing what was implemented]
-
-## Implementation Plan
-[How the implementation was carried out]
-
-## Acceptance Criteria
-- [Criterion 1]
-- [Criterion 2]
-
-## Affected Modules
-- [Module path 1]
-- [Module path 2]
-
-## Verification Items
-For each item, provide a bash command that verifies the behavior:
-
-1. **Description**: [What this verifies]
-   **Command**: \`[bash command]\`
-
-2. **Description**: [What this verifies]
-   **Command**: \`[bash command]\``;
+Respond with valid JSON only, following the format specified in the system prompt. Do not include markdown code blocks (no \`\`\`json fences) or explanatory text — output only the JSON object.`;
 
 const VERIFIER_PROMPT = `You are a verification agent. You will receive a check plan with verification items.
 Your job is to:
@@ -114,14 +93,6 @@ function lastAssistantText(messages: readonly unknown[]): string {
 function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
-
-const EMPTY_CHECK_PLAN: CheckPlan = {
-  taskSummary: '',
-  implementationPlan: '',
-  acceptanceCriteria: [],
-  affectedModules: [],
-  verificationItems: [],
-};
 
 // ── Orchestrator ───────────────────────────────────────────────────────
 
@@ -225,21 +196,40 @@ export class AgentModeOrchestrator {
         { transcript?: { systemPrompt: string; messages: unknown[] } } | undefined;
       if (!data?.transcript) return this.fail(phase, 'No implementation transcript available');
 
-      const result = await this.runAgent(
-        phase,
-        this.buildPlannerPrompt(data.transcript),
+      const planner = createAgent(
         {
           role: 'coordinator',
           systemPrompt: this.prompts.planner,
           tools: READ_ONLY_TOOLS,
+          outputSchema: CheckPlanSchema,
         },
-        undefined,
-        signal,
+        this.config,
       );
 
-      if (result.error) return this.fail(phase, `Planner error: ${result.error}`);
+      const unsub = this.subscribeToAgent(planner, phase);
+      const abortHandler = (): void => {
+        planner.abort();
+      };
+      signal?.addEventListener('abort', abortHandler);
 
-      const checkPlan = this.parseCheckPlan(result.agent.state.messages);
+      let checkPlan: CheckPlan;
+      try {
+        const prompt = this.buildPlannerPrompt(data.transcript);
+        const result = await promptWithValidation(planner, prompt, CheckPlanSchema, 3);
+
+        if (!result.ok) {
+          return this.fail(phase, `Planner output validation failed: ${result.errors.join('; ')}`, {
+            validationErrors: result.errors,
+            rawText: result.rawText,
+          });
+        }
+
+        checkPlan = result.data;
+      } finally {
+        signal?.removeEventListener('abort', abortHandler);
+        unsub();
+      }
+
       const n = checkPlan.verificationItems.length;
       return this.ok(phase, `Check plan: ${String(n)} verification item${n !== 1 ? 's' : ''}`, {
         checkPlan,
@@ -456,44 +446,6 @@ export class AgentModeOrchestrator {
   }
 
   // ── Parsing ──────────────────────────────────────────────────────────
-
-  private parseCheckPlan(messages: readonly unknown[]): CheckPlan {
-    const text = lastAssistantText(messages);
-    if (!text) return EMPTY_CHECK_PLAN;
-
-    const s = (heading: string): string => this.extractSection(text, heading);
-    return {
-      taskSummary: s('Task Summary'),
-      implementationPlan: s('Implementation Plan'),
-      acceptanceCriteria: this.extractBullets(s('Acceptance Criteria')),
-      affectedModules: this.extractBullets(s('Affected Modules')),
-      verificationItems: this.extractVerificationItems(text),
-    };
-  }
-
-  private extractSection(text: string, heading: string): string {
-    const m = new RegExp(`## ${heading}\\s*\\n([\\s\\S]*?)(?=\\n## |$)`, 'i').exec(text);
-    return m?.[1]?.trim() ?? '';
-  }
-
-  private extractBullets(section: string): string[] {
-    return section
-      .split('\n')
-      .map((l) => l.replace(/^[-*]\s+/, '').trim())
-      .filter(Boolean);
-  }
-
-  private extractVerificationItems(text: string): VerificationItem[] {
-    const items: VerificationItem[] = [];
-    for (const part of this.extractSection(text, 'Verification Items').split(
-      /\n(?=\d+\.\s+\*\*Description\*\*)/,
-    )) {
-      const d = /\*\*Description\*\*:\s*(.+)/i.exec(part);
-      const c = /\*\*Command\*\*:\s*`([^`]+)`/i.exec(part);
-      if (d?.[1] && c?.[1]) items.push({ description: d[1].trim(), command: c[1].trim() });
-    }
-    return items;
-  }
 
   private parseResults(
     text: string,
