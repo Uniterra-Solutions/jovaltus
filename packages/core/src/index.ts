@@ -34,3 +34,30 @@ export {
   READ_WRITE_TOOLS,
   VERIFY_TOOLS,
 } from './agent/tools/index.js';
+
+// Worktree
+export { WorktreeManager } from './worktree/manager.js';
+export { WorktreeError } from './worktree/types.js';
+export type {
+  WorktreeEntry,
+  WorktreeCreateOptions,
+  WorktreeMergeResult,
+  WorktreeDeleteOptions,
+  WorktreeErrorCode,
+} from './worktree/types.js';
+
+// Diff
+export { CleanDiffManager } from './diff/manager.js';
+export { DiffError } from './diff/types.js';
+export type {
+  DiffLevel,
+  DiffFileEntry,
+  DiffResult,
+  DiffRequest,
+  DiffErrorCode,
+} from './diff/types.js';
+
+// Planner
+export { PlannerCore } from './planner/core.js';
+export { PlannerError } from './planner/types.js';
+export type { TaskInput, TaskNode, Batch, PlanResult, PlannerErrorCode } from './planner/types.js';

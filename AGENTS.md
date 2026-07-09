@@ -20,7 +20,7 @@
 - `docs/features/chat-interface.md` — Chat panel: send, receive, theme adaptation
 - `docs/features/agent-operations.md` — File read/write/edit and bash execution (core engine; not yet wired to UI)
 - `docs/features/configuration.md` — VS Code settings for models and providers
-- `docs/architecture/core-package.md` — Core engine: agent factory, model abstraction, config layering
+- `docs/architecture/core-package.md` — Core engine: agent factory, model abstraction, config layering, worktree/diff/planner infrastructure
 - `docs/architecture/extension-package.md` — Extension: activation, message protocol, webview architecture
 - `docs/architecture/tool-system.md` — Tool definitions, presets, ToolRegistry, directory guard
 - `docs/principles/naming-conventions.md` — File/module/class/function naming

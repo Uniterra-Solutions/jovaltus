@@ -19,11 +19,18 @@ Pure TypeScript library providing agent factory, model abstraction, configuratio
 - `src/config/defaults.ts` — `DEFAULT_CONFIG` — static fallback values
 - `src/config/manager.ts` — `ConfigManager` — three-layer config resolution via `ConfigProvider` interface
 - `src/config/types.ts` — `JovaltusConfig`, `ModelConfig`, `ProviderConfig`, `ConfigProvider` types
+- `src/diff/manager.ts` — `CleanDiffManager` — cross-level clean diff between commit pairs via `git diff --numstat --patch --name-status`
+- `src/diff/types.ts` — `DiffError`, `DiffLevel`, `ChangeType`, `DiffFileEntry`, `DiffResult`, `DiffRequest` types
+- `src/git.ts` — `execGit()` + `gitErr()` — shared internal Git helper (NOT exported from barrel)
 - `src/model/anthropic-provider.ts` — `AnthropicProvider` — adapter wrapping @anthropic-ai/sdk
 - `src/model/client.ts` — `ModelClient` interface + `createModelClient()` factory
 - `src/model/errors.ts` — `ModelError` (6 error codes) + `statusToCode()` + `classifyError()` + `parseRetryAfter()`
 - `src/model/openai-provider.ts` — `OpenAIProvider` — adapter wrapping `openai` SDK
 - `src/model/types.ts` — `ChatMessage`, `CompletionRequest`, `CompletionResponse`, `TokenUsage` DTOs
+- `src/planner/core.ts` — `PlannerCore` — task scheduling with overlap-aware Kahn's topological sort
+- `src/planner/types.ts` — `PlannerError`, `TaskInput`, `TaskNode`, `Batch`, `PlanResult` types
+- `src/worktree/manager.ts` — `WorktreeManager` — git worktree lifecycle (create, list, get, merge, remove)
+- `src/worktree/types.ts` — `WorktreeError`, `WorktreeEntry`, `WorktreeCreateOptions`, `WorktreeMergeResult`, `WorktreeDeleteOptions` types
 
 # RULES SHOULD NOT BE VIOLATED
 
@@ -34,3 +41,5 @@ Pure TypeScript library providing agent factory, model abstraction, configuratio
 - `src/agent/` must never import from `src/model/` — the two LLM access paths are independent and share only config types. Evidence: `src/agent/factory.ts:1-13` imports from pi-ai/pi-agent-core + config types only, no model/ imports
 - Never break the Tool contract — every tool must have `name`, `label`, `description`, `parameters` (TypeBox), and `execute(id, params, signal)` returning `AgentToolResult`. Evidence: all four tools in `src/agent/tools/` follow this exact shape
 - Never expose internal modules through barrel exports — `index.ts` files use explicit named exports only, no `export * from`. Evidence: `src/index.ts`, `src/agent/index.ts` list every symbol individually
+- `src/git.ts` is the ONLY shared Git helper — manager-level `git()` wrappers delegate to it; never use `execFile`/`spawn` directly for git operations in other modules
+- Planner is pure logic — `PlannerCore` takes structured `TaskInput[]`, returns `PlanResult`, has zero I/O or git dependencies
