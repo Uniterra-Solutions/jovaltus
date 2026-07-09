@@ -98,6 +98,7 @@
     "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
+    "@jovaltus/core": "workspace:*",
     "@types/vscode": "^1.95.0",
     "@vscode/vsce": "^3.0.0"
   }

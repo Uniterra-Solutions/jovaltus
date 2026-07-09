@@ -1,4 +1,7 @@
 import * as vscode from 'vscode';
+import type { ConfigProvider } from '@jovaltus/core';
+import { ConfigManager, AgentModeOrchestrator } from '@jovaltus/core';
+import type { AgentModeEvent } from '@jovaltus/core';
 
 function getWebviewHtml(): string {
   return `<!DOCTYPE html>
@@ -47,6 +50,7 @@ function getWebviewHtml(): string {
       max-width: 85%;
       word-break: break-word;
       line-height: 1.5;
+      white-space: pre-wrap;
     }
 
     .message.user {
@@ -57,6 +61,24 @@ function getWebviewHtml(): string {
     .message.assistant {
       align-self: flex-start;
       background: var(--vscode-textCodeBlock-background);
+    }
+
+    .message.system {
+      align-self: center;
+      background: transparent;
+      color: var(--vscode-descriptionForeground);
+      font-size: 12px;
+      padding: 4px 8px;
+      max-width: 100%;
+      text-align: center;
+    }
+
+    .message.error {
+      align-self: center;
+      background: var(--vscode-inputValidation-errorBackground);
+      color: var(--vscode-inputValidation-errorForeground);
+      border: 1px solid var(--vscode-inputValidation-errorBorder);
+      font-size: 13px;
     }
 
     .input-area {
@@ -120,6 +142,7 @@ function getWebviewHtml(): string {
     const inputEl = document.getElementById('user-input');
     const sendBtn = document.getElementById('send-btn');
     let firstMessage = true;
+    let currentStreamBubble = null;
 
     function addMessage(text, role) {
       if (firstMessage) {
@@ -131,6 +154,18 @@ function getWebviewHtml(): string {
       msg.textContent = text;
       messagesEl.appendChild(msg);
       messagesEl.scrollTop = messagesEl.scrollHeight;
+      return msg;
+    }
+
+    function appendToStream(text) {
+      if (currentStreamBubble) {
+        currentStreamBubble.textContent += text;
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+    }
+
+    function flushStream() {
+      currentStreamBubble = null;
     }
 
     function sendMessage() {
@@ -148,8 +183,46 @@ function getWebviewHtml(): string {
 
     window.addEventListener('message', function(event) {
       const msg = event.data;
-      if (msg.type === 'assistantMessage') {
-        addMessage(msg.text, 'assistant');
+      switch (msg.type) {
+        case 'assistantMessage':
+          addMessage(msg.text, 'assistant');
+          flushStream();
+          break;
+
+        case 'phaseStart':
+          addMessage('[Phase] ' + msg.phase + ': ' + msg.text, 'system');
+          flushStream();
+          break;
+
+        case 'phaseEnd':
+          addMessage(
+            '[Phase] ' + msg.phase + ': ' + msg.status + ' — ' + msg.text,
+            msg.status === 'failed' ? 'error' : 'system'
+          );
+          flushStream();
+          break;
+
+        case 'streamDelta':
+          if (!currentStreamBubble) {
+            currentStreamBubble = addMessage('', 'assistant');
+          }
+          appendToStream(msg.text);
+          break;
+
+        case 'toolCall':
+          addMessage('[Tool] ' + msg.phase + ' → ' + msg.toolName, 'system');
+          flushStream();
+          break;
+
+        case 'agentError':
+          addMessage('[Error] ' + msg.phase + ': ' + msg.text, 'error');
+          flushStream();
+          break;
+
+        case 'agentComplete':
+          addMessage(msg.summary, 'assistant');
+          flushStream();
+          break;
       }
     });
   </script>
@@ -164,12 +237,126 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.onDidReceiveMessage(
       (message: { readonly type: string; readonly text: string }) => {
-        if (message.type === 'userMessage')
-          void webviewView.webview.postMessage({
-            type: 'assistantMessage',
-            text: `Echo: ${message.text}`,
-          });
+        if (message.type === 'userMessage') {
+          void this.handleUserMessage(message.text, webviewView);
+        }
       },
     );
+  }
+
+  private async handleUserMessage(text: string, webviewView: vscode.WebviewView): Promise<void> {
+    const configManager = new ConfigManager(new VSCodeConfigProvider());
+    const config = configManager.getConfig();
+
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders?.[0]) {
+      void webviewView.webview.postMessage({
+        type: 'agentError',
+        phase: 'implementation',
+        text: 'No workspace folder open. Please open a project first.',
+      });
+      return;
+    }
+
+    const repoPath = workspaceFolders[0].uri.fsPath;
+
+    const orchestrator = new AgentModeOrchestrator({
+      repoPath,
+      config,
+    });
+
+    void webviewView.webview.postMessage({
+      type: 'assistantMessage',
+      text: `Starting agent mode task...`,
+    });
+
+    orchestrator.onEvent((event: AgentModeEvent) => {
+      switch (event.type) {
+        case 'phase_start':
+          void webviewView.webview.postMessage({
+            type: 'phaseStart',
+            phase: event.phase,
+            text: this.phaseLabel(event.phase),
+          });
+          break;
+
+        case 'phase_end':
+          void webviewView.webview.postMessage({
+            type: 'phaseEnd',
+            phase: event.phase,
+            status: event.result.status,
+            text: event.result.summary,
+          });
+          break;
+
+        case 'stream_delta':
+          void webviewView.webview.postMessage({
+            type: 'streamDelta',
+            phase: event.phase,
+            text: event.text,
+          });
+          break;
+
+        case 'tool_call':
+          void webviewView.webview.postMessage({
+            type: 'toolCall',
+            phase: event.phase,
+            toolName: event.toolName,
+          });
+          break;
+
+        case 'tool_result':
+          // Tool results are intermediate — don't spam the UI with each one
+          break;
+
+        case 'error':
+          void webviewView.webview.postMessage({
+            type: 'agentError',
+            phase: event.phase,
+            text: event.message,
+          });
+          break;
+      }
+    });
+
+    try {
+      const result = await orchestrator.run(text);
+
+      void webviewView.webview.postMessage({
+        type: 'agentComplete',
+        summary: result.finalSummary,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      void webviewView.webview.postMessage({
+        type: 'agentError',
+        phase: 'implementation',
+        text: `Fatal error: ${msg}`,
+      });
+    }
+  }
+
+  private phaseLabel(phase: string): string {
+    const labels: Record<string, string> = {
+      implementation: 'Implementing changes',
+      planning: 'Distilling & planning',
+      verification: 'Verifying & fixing',
+      simplification: 'Simplifying code',
+    };
+    return labels[phase] ?? phase;
+  }
+}
+
+/**
+ * Bridges VS Code configuration API into core's ConfigProvider interface.
+ */
+class VSCodeConfigProvider implements ConfigProvider {
+  public get<T>(key: string, defaultValue: T): T {
+    const parts = key.split('.');
+    const root = parts[0] ?? 'jovaltus';
+    const section = parts.slice(1).join('.');
+    const config = vscode.workspace.getConfiguration(root);
+    const value = config.get<T>(section);
+    return value !== undefined ? value : defaultValue;
   }
 }

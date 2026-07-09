@@ -61,3 +61,15 @@ export type {
 export { PlannerCore } from './planner/core.js';
 export { PlannerError } from './planner/types.js';
 export type { TaskInput, TaskNode, Batch, PlanResult, PlannerErrorCode } from './planner/types.js';
+
+// Orchestrator
+export { AgentModeOrchestrator } from './orchestrator/agent-mode.js';
+export type {
+  PhaseName,
+  PhaseResult,
+  AgentModeResult,
+  AgentModeOptions,
+  AgentModeEvent,
+  VerificationItem,
+  CheckPlan,
+} from './orchestrator/types.js';
