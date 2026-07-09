@@ -93,13 +93,25 @@
     }
   },
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && vite build",
+    "build:webview": "vite build",
     "watch": "tsc -b -w",
     "package": "vsce package --no-dependencies"
   },
+  "dependencies": {
+    "@assistant-ui/react": "^0.14.0",
+    "@assistant-ui/react-markdown": "^0.14.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
   "devDependencies": {
     "@jovaltus/core": "workspace:*",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "@types/vscode": "^1.95.0",
-    "@vscode/vsce": "^3.0.0"
+    "@vitejs/plugin-react": "^6.0.0",
+    "@vscode/vsce": "^3.0.0",
+    "jsdom": "^29.1.1",
+    "vite": "^8.0.0"
   }
 }
