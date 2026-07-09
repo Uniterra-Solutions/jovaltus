@@ -2,9 +2,3 @@ node_modules/
 dist/
 *.log
 .tsbuildinfo
-.vsix
-
-# IDE
-.idea/
-*.swp
-*.swo
