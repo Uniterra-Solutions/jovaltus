@@ -5,8 +5,9 @@ Pure TypeScript library providing agent factory, model abstraction, configuratio
 # MODULE FILE LIST
 
 - `src/index.ts` — Public API barrel (explicit named exports, no wildcard re-exports)
-- `src/agent/factory.ts` — `createAgent()` and `createModelRegistry()` — bridges JovaltusConfig → pi-ai/pi-agent-core
+- `src/agent/factory.ts` — `createAgent()` and `createModelRegistry()` — bridges JovaltusConfig → pi-ai/pi-agent-core; also `buildOutputFormatPrompt()` and `createOutputFormatPayloadHook()` for structured output
 - `src/agent/index.ts` — Agent module barrel
+- `src/agent/output-validation.ts` — `extractJsonFromText()`, `validateOutput()`, `generateJsonExample()`, `buildValidationRetryPrompt()`, `promptWithValidation()` — three-layer structured output defense (system prompt injection, provider response_format, TypeBox validation + retry)
 - `src/agent/restrict-directory.ts` — `restrictToDirectory()` — beforeToolCall hook blocking out-of-dir path access
 - `src/agent/tool-registry.ts` — `ToolRegistry` — Map-based in-memory tool registry
 - `src/agent/types.ts` — `AgentRole`, `AgentContext`, `CreateAgentOptions` types
@@ -30,6 +31,7 @@ Pure TypeScript library providing agent factory, model abstraction, configuratio
 - `src/planner/core.ts` — `PlannerCore` — task scheduling with overlap-aware Kahn's topological sort
 - `src/planner/types.ts` — `PlannerError`, `TaskInput`, `TaskNode`, `Batch`, `PlanResult` types
 - `src/orchestrator/agent-mode.ts` — `AgentModeOrchestrator` — event-driven 4-stage pipeline: impl → plan → verify & fix → simplify → reverify
+- `src/orchestrator/check-plan-schema.ts` — `CheckPlanSchema` — TypeBox schema for Planner agent structured JSON output
 - `src/orchestrator/types.ts` — `PhaseName`, `PhaseResult`, `AgentModeResult`, `AgentModeEvent`, `VerificationItem`, `CheckPlan`, `AgentModeOptions` types
 - `src/orchestrator/index.ts` — Orchestrator barrel export
 - `src/worktree/manager.ts` — `WorktreeManager` — git worktree lifecycle (create, list, get, merge, remove)

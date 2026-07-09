@@ -1,6 +1,6 @@
 # 核心套件（Core Package）設計原則
 
-來源：`packages/core/src/index.ts`、`packages/core/src/agent/factory.ts`、`packages/core/src/config/manager.ts`、`packages/core/src/worktree/manager.ts`、`packages/core/src/diff/manager.ts`、`packages/core/src/planner/core.ts`、`packages/core/src/orchestrator/agent-mode.ts`
+來源：`packages/core/src/index.ts`、`packages/core/src/agent/factory.ts`、`packages/core/src/agent/output-validation.ts`、`packages/core/src/config/manager.ts`、`packages/core/src/worktree/manager.ts`、`packages/core/src/diff/manager.ts`、`packages/core/src/planner/core.ts`、`packages/core/src/orchestrator/agent-mode.ts`
 
 ## 套件定位
 
@@ -8,11 +8,12 @@
 
 ## 代理工廠模式 (Agent Factory)
 
-代理實例由工廠函式 `createAgent` 根據三個配置維度統一生產：
+代理實例由工廠函式 `createAgent` 根據四個配置維度統一生產：
 
 - **System Prompt**：定義角色行為與輸出格式（從外部注入，非寫死在程式碼中）
 - **Context**：控制代理可見的資訊範圍（檔案路徑、程式碼片段、diff）
 - **Tools**：控制代理可執行的操作集合（唯讀、讀寫、驗證三種等級）
+- **OutputSchema**（可選）：設定後自動在 system prompt 中注入 JSON 格式範例，並透過 `onPayload` hook 對 OpenAI 相容 provider 注入 `response_format: {type: "json_object"}`。呼叫端使用 `promptWithValidation()` 進行 TypeBox 驗證 + 欄位錯誤回饋 + 自動重試（最多 3 次）
 
 代理角色分為兩級：`coordinator`（協調者，使用較高能力模型進行決策）與 `worker`（工作者，使用較低成本模型進行實作）。
 
@@ -37,7 +38,7 @@
 
 ## 模組邊界
 
-- **Agent 模組**：代理實例化與生命週期管理。對外僅暴露 `createAgent`、`createModelRegistry`、`ToolRegistry`、`restrictToDirectory`。
+- **Agent 模組**：代理實例化、生命週期管理，以及結構化輸出驗證。對外暴露 `createAgent`、`createModelRegistry`、`ToolRegistry`、`restrictToDirectory`、`promptWithValidation`、`validateOutput`、`extractJsonFromText`、`generateJsonExample`、`buildValidationRetryPrompt`。來源：`packages/core/src/agent/factory.ts:98-131`、`packages/core/src/agent/output-validation.ts:10-123`。
 - **Config 模組**：配置類型定義、預設值、合併邏輯、上下文視窗自動偵測。對外僅暴露 `ConfigManager`、`DEFAULT_CONFIG`、`resolveContextWindow`。
 - **Model 模組**：低層次模型存取抽象。對外僅暴露 `createModelClient`、`ModelError`、`OpenAIProvider`、`AnthropicProvider`。
 - **Tools 模組**：內建工具定義與能力分級預設組合。對外僅暴露四個工具常數與三組預設工具集合。
