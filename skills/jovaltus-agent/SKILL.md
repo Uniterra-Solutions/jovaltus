@@ -2,10 +2,13 @@
 name: jovaltus-agent
 description: "Jovaltus Agent Mode — automated development pipeline with four phases: Plan → Implement → Verify & Fix → Simplify"
 author: LaiTszKin
-version: 0.1.0
+version: 0.2.0
 metadata:
   jovaltus:
     tags: [development, pipeline, code-quality, verification]
+  cli_commands:
+    setup: "Create jovaltus-agent profile and apply SOUL.md (coding agent identity)"
+    update: "Check for and apply plugin updates from remote repository"
 ---
 
 # Jovaltus Agent Mode Workflow

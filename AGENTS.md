@@ -2,7 +2,7 @@
 
 ## Build & Test
 
-- `uv run pytest -v` — Run full test suite (25 tests, ~1.2s)
+- `uv run pytest -v` — Run full test suite (36 tests, ~2.4s)
 - `uv run python3 -m py_compile *.py tests/*.py` — Type/syntax check
 - All tests pass before commit. No lint warnings.
 
@@ -13,9 +13,11 @@
 - `schemas.py` — Tool JSON schemas (what the LLM sees)
 - `state.py` — Thread-safe in-memory task state
 - `git_utils.py` — Git subprocess wrappers (list args, no shell=True)
+  - New in v0.2.0: remote update utilities (fetch, pull, ahead/behind check)
+- `SOUL.md` — Bundled agent identity file; applied to profile via `setup`
 - `prompts/*.md` — Subagent system prompts (editable without touching Python)
 - `skills/jovaltus-agent/SKILL.md` — Agent Mode workflow definition
-- `tests/` — 25 pytest tests across 4 test files + conftest.py
+- `tests/` — 36 pytest tests across 4 test files + conftest.py
 
 ## Key Constraints
 
@@ -32,6 +34,14 @@
 - `docs/architecture/` — Module boundaries and design principles
 - `docs/principles/` — Code conventions with source evidence
 - Every doc claim traces to source file + line range. `[INFERRED]` marks unverifiable claims.
+
+## CLI Commands (v0.2.0)
+
+- `hermes jovaltus setup` — Create profile, apply SOUL.md (one-command install)
+  - Creates `jovaltus-agent` profile if missing
+  - Writes `SOUL.md` to profile directory for coding agent identity
+- `hermes jovaltus update --check` — Check for remote updates against origin
+- `hermes jovaltus update` — Pull latest changes (fast-forward only)
 
 ## Workflow
 
