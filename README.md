@@ -33,20 +33,20 @@ User Request
 | Layer | What It Does | Why |
 |-------|-------------|-----|
 | **Skill** (documents) | Describes what each phase should do. No tool names. | LLM reads this + tool schemas, figures out the flow itself. |
-| **Tool Handler** (thin Python) | Tracks state, stores git hashes, computes diffs. Returns JSON to the main agent. | Keeps state management away from the LLM. Main agent decides the orchestration. |
-| **Hook** (mechanical Python) | `pre_tool_call`: records git hash before implement. `post_tool_call`: auto-commits after implement. | Pure automation. No LLM involved. |
+| **Tool Handler** (thin Python) | Records state, reads system prompt from file, spawns subagent via `ctx.dispatch_tool("delegate_task", ...)`. Returns immediately. | One tool call per phase. No manual `delegate_task` from the main agent. Prompt lives in its own file. |
+| **Subagent prompt** (markdown) | The system prompt injected into each subagent. Lives in `prompts/*.md`. | Editable without touching Python. Each subagent reads its own prompt. |
 
-### The Main Agent as Orchestrator
+### One Tool Call Per Phase
 
-The main agent (the conversation partner) serves as the **planner and dispatcher**:
+The main agent calls ONE tool per phase. That tool handler:
 
-1. Follow the Skill document to understand what phase comes next
-2. Call the Jovaltus plugin tool (e.g. `jovaltus_implement`) to get state context
-3. Read the tool's response — `task_id`, `start_hash`, etc.
-4. Call `delegate_task` with the right goal, context, and toolsets to spawn a subagent
-5. Read the subagent's summary and decide the next phase
+1. Records state (git hash, task_id)
+2. Reads the system prompt from `prompts/<phase>.md`
+3. Spawns a subagent via `ctx.dispatch_tool("delegate_task", ...)` with the prompt as goal
+4. Returns immediately — the subagent runs in the background
 
-The plugin tools never call `delegate_task` themselves. They are state keepers, not dispatchers. The main agent owns the orchestration.
+The subagent self-commits when done. Its result arrives as a message
+the main agent reads to decide the next phase.
 
 ---
 
@@ -70,55 +70,74 @@ User: "Build a login page"
         "Don't start implementing until the user says yes."
 ```
 
-### Phase 1: Implement (Subagent)
+### Phase 1: Implement
 
 ```
 Main agent calls jovaltus_implement
-    → Handler records start_hash, returns {task_id, start_hash}
+    └─ Handler:
+        1. Records start_hash, creates task
+        2. Reads prompts/implement.md
+        3. ctx.dispatch_tool("delegate_task", {
+               goal: implement prompt,
+               toolsets: [terminal, file]
+           })
+        4. Returns {task_id, start_hash}
 
-Main agent calls delegate_task(goal=..., context=..., toolsets=[terminal, file])
-    → Subagent:
-        • Reads context from tool handler
-        • Writes code (full read/write access)
-        • Does NOT verify, does NOT simplify
-        • Reports BLOCKED if genuinely stuck
-
-Hook: post_tool_call detects jovaltus_implement → auto git commit
+Subagent works in background:
+    • Reads context from handler
+    • Writes code (full read/write access)
+    • Does NOT verify, does NOT simplify
+    • Reports BLOCKED if genuinely stuck
+    • git add -A && git commit when done
 ```
 
 **Tool permissions**: `terminal`, `file` (full read/write).  
 **Red lines**: ❌ No touching irrelevant files. ❌ No self-verification. ❌ No self-simplification.
 
-### Phase 2: Verify & Fix (Subagent)
+### Phase 2: Verify & Fix
 
 ```
-Main agent calls jovaltus_verify
-    → Handler computes git diff (start_hash → HEAD), returns diff context
+Main agent calls jovaltus_verify(task_id)
+    └─ Handler:
+        1. Looks up task, computes diff (start_hash → HEAD)
+        2. Reads prompts/verify.md
+        3. ctx.dispatch_tool("delegate_task", {
+               goal: verify prompt,
+               context: diff output,
+               toolsets: [terminal, file]
+           })
+        4. Returns {task_id, diff_summary}
 
-Main agent calls delegate_task(goal=adversarial verification, context=diff, toolsets=[terminal, file])
-    → Subagent (with write access):
-        • Runs the code
-        • Tries to break it (adversarial mindset)
-        • Finds bugs → fixes them directly → commits → re-verifies
-        • Loops until all tests pass (self-contained verify-fix loop)
-        • Reports what was found and fixed
+Subagent works in background (with write access):
+    • Runs the code
+    • Tries to break it (adversarial mindset)
+    • Finds bugs → fixes them directly → re-verifies
+    • Loops until all tests pass
+    • git add -A && git commit when done
 ```
 
 **Mindset**: Adversarial. Not "does it work?" but "how can I break this?"  
 **Write access**: The subagent can fix what it finds — no read-only reporting. This is the Fable 5 closed-loop model.
 
-### Phase 3: Simplify (Subagent)
+### Phase 3: Simplify
 
 ```
-Main agent calls jovaltus_simplify
-    → Handler computes clean diff (start_hash → HEAD, no intermediate fix commits)
+Main agent calls jovaltus_simplify(task_id)
+    └─ Handler:
+        1. Looks up task, computes clean diff
+        2. Reads prompts/simplify.md
+        3. ctx.dispatch_tool("delegate_task", {
+               goal: simplify prompt,
+               context: clean diff,
+               toolsets: [terminal, file]
+           })
+        4. Returns {task_id, diff_summary}
 
-Main agent calls delegate_task(goal=structural simplification, context=clean diff, toolsets=[terminal, file])
-    → Subagent:
-        • No behaviour changes
-        • Structural priorities: extract duplicates > delete dead code > flatten nesting > improve naming
-        • Mandatory grep evidence before deleting anything
-        • Reports simplification summary
+Subagent works in background:
+    • No behaviour changes
+    • Structural priorities: extract duplicates > delete dead code > flatten nesting > improve naming
+    • Mandatory grep evidence before deleting anything
+    • git add -A && git commit when done
 ```
 
 **Value hierarchy**: Extract duplicates → Delete dead code → Flatten nesting → Improve naming.  
@@ -133,8 +152,11 @@ Main agent calls delegate_task(goal=structural simplification, context=clean dif
 ```bash
 # From GitHub
 hermes plugins install LaiTszKin/jovaltus --enable
+```
 
-# Run setup to create the jovaltus-agent profile
+### Setup (creates the jovaltus-agent profile)
+
+```bash
 hermes jovaltus setup
 ```
 
@@ -154,25 +176,24 @@ hermes -p jovaltus-agent
 
 ---
 
-## Plugin File Structure
+## Project Structure
 
 ```
-~/.hermes/plugins/jovaltus/
-├── plugin.yaml              # Manifest
-├── __init__.py              # register() — mounts tools, hooks, CLI commands, skills
-├── hooks.py                 # pre/post tool_call: git hash tracking, auto-commit
-├── tools.py                 # Thin handlers: state management, diff computation
-├── state.py                 # Task state (in-memory dict)
-├── git_utils.py             # Git subprocess wrappers
-│
+jovaltus/
+├── README.md              # Proposal + usage
+├── plugin.yaml            # Hermes plugin manifest
+├── __init__.py            # register() — creates handler closures, mounts everything
+├── schemas.py             # Tool JSON schemas (what the LLM sees)
+├── tools.py               # Tool handler factories (capture ctx, spawn subagents)
+├── state.py               # In-memory task state
+├── git_utils.py           # Git subprocess wrappers
 ├── skills/
 │   └── jovaltus-agent/
-│       └── SKILL.md         # Agent Mode workflow (no tool names)
-│
+│       └── SKILL.md       # Agent Mode workflow (no tool names)
 └── prompts/
-    ├── implement.md         # Implement agent system prompt
-    ├── verify.md            # Verification agent system prompt
-    └── simplify.md          # Simplifier agent system prompt
+    ├── implement.md       # Implement subagent system prompt
+    ├── verify.md          # Verification subagent system prompt
+    └── simplify.md        # Simplifier subagent system prompt
 ```
 
 ---
@@ -185,44 +206,14 @@ hermes -p jovaltus-agent
 | **Plugin sharing** | GitHub repo + `hermes plugins install` |
 | **Profile init** | Plugin provides `hermes jovaltus setup` CLI command (`ctx.register_cli_command`) |
 | **Profile binding** | Not directory-bound — same profile works across projects |
-| **Pipeline control** | Skill document guides main agent, no orchestrator code |
-| **Git tracking** | Hooks handle pre/post implement automatically |
-| **Task ID flow** | Plugin tool returns `task_id` → main agent reads it → passes to next tool |
-| **Diff computation** | `git diff <start-hash> HEAD` handled by the plugin tool |
-| **Verify loop** | Verification subagent has write access and runs a self-contained `verify → fix → re-verify` loop |
-| **Simplify input** | Clean diff (start vs final, no intermediate fix commits) |
-| **Skill style** | Describes *what* to do, never names tools |
-| **Plugin skills** | Read-only, namespaced (`"jovaltus-agent:jovaltus-agent"`), loaded via `skill_view()` |
-| **Tool handler** | State manager only — returns JSON, does not dispatch `delegate_task` |
-
----
-
-## Design Principles
-
-### Why Three Layers?
-
-- **Skill** = what the LLM reads to know the workflow. Changes with the model's reading comprehension.
-- **Tool Handler** = what Python runs to manage state. Changes when the data model changes.
-- **Hook** = pure mechanical automation. Changes when the git workflow changes.
-
-Separate concerns means changing the workflow (e.g. adding a new phase) only requires updating the Skill document — no Python code changes.
-
-### Why the Main Agent Orchestrates?
-
-The main agent has access to the full tool set (`delegate_task`, `web_search`, `skill_view`, etc.) and full conversational context. Putting orchestration logic in Python would:
-- Lose access to `delegate_task` (tool handlers can't call it)
-- Require maintaining a second planning layer in code
-- Fight against the LLM's natural strength at reasoning about workflows
-
-### Why Adversarial Verification?
-
-Testing to confirm "it works" misses edge cases. Testing to "break it" surfaces:
-- Input sanitisation gaps (XSS, injection)
-- Rate limiting failures
-- Incorrect error handling
-- State management bugs
-
-The verification subagent has write access so it can fix what it finds — no read-only reporting that creates more work for the main agent.
+| **Pipeline control** | Skill document guides main agent. Each phase = one tool call. |
+| **Git tracking** | Tool handler records start_hash. Subagent self-commits when done. |
+| **Subagent spawning** | Tool handler calls `ctx.dispatch_tool("delegate_task", ...)` with prompt from file |
+| **System prompts** | Stored in `prompts/*.md`, read by handler at call time |
+| **Verify loop** | Verification subagent has write access and runs a self-contained loop |
+| **Simplify input** | Handler computes clean diff (start vs HEAD, no intermediate commits) |
+| **Skill style** | Describes *what* to do, never names tools other than the three plugin tools |
+| **Plugin skills** | Read-only, namespaced (`"jovaltus:jovaltus-agent"`), loaded via `skill_view()` |
 
 ---
 
