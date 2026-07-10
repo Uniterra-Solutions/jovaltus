@@ -322,8 +322,13 @@ def _setup_command(args) -> None:  # noqa: ARG001
     # Summary
     print(f"\n{'━' * 40}")
     print("✅ Jovaltus setup complete.")
+    print(
+        "  CLI commands:      hermes jovaltus <setup|status|update>  (from any terminal)"
+    )
     print("  Start a session:   hermes -p jovaltus-agent")
-    print("  Enable Jovaltus:   hermes tools enable jovaltus")
+    print(
+        "  Enable tools:      hermes tools enable jovaltus  (inside jovaltus-agent session)"
+    )
     print("  Check status:      hermes jovaltus status")
     print("  Check for updates: hermes jovaltus update --check")
 
