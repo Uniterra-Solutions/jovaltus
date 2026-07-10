@@ -1,111 +1,109 @@
 ---
 name: jovaltus-agent
-description: "Jovaltus Agent Mode — automated development pipeline with four phases: Plan → Implement → Verify & Fix → Simplify"
+description: >-
+  Orchestrates the Jovaltus 4-phase development pipeline for multi-file
+  software features: Plan → Implement → Verify & Fix → Simplify. Each phase
+  spawns an isolated subagent with write access, produces git commits, and
+  costs significant tokens (4 subagent runs per full cycle).
+
+  LOAD when:
+  - User says "start pipeline", "enter jovaltus mode"
+  - User names phases in sequence: "plan this", "implement
+    and verify", "run through the pipeline"
+  - User asks to "implement [feature]" where it clearly spans
+    multiple files / needs reasoning (NOT a single-file fix)
+
+  DO NOT load when:
+  - Single-command investigations, typo fixes, or one-line changes
+  - Quick code reviews, dependency bumps, pure read-only tasks
+  - Phase words (verify/simplify/implement) appear in non-pipeline
+    context (e.g., "verify the file exists", "simplify this")
+  - Any task completable in under 2 minutes or in a single file
+
+  When in doubt: do NOT load. Confirm with the user before
+  committing to a 4-phase run.
 author: LaiTszKin
-version: 0.2.0
+version: 0.3.0
 metadata:
   jovaltus:
-    tags: [development, pipeline, code-quality, verification]
-  cli_commands:
-    setup: "Create jovaltus-agent profile and apply SOUL.md (coding agent identity)"
-    update: "Check for and apply plugin updates from remote repository"
+    tags: [development, pipeline, code-quality, verification, multi-agent]
 ---
 
-# Jovaltus Agent Mode Workflow
+# Jovaltus Pipeline
 
-This skill defines the four-phase pipeline for automated development work.
-The main agent (you) orchestrates by calling one tool per phase.
-Each tool spawns a subagent with the right system prompt and permissions.
+## Goal
 
-**✨ New: Stage-Guided Pipeline**
-Jovaltus now includes hooks that inject stage guidance before each LLM turn:
-- **`pre_llm_call` hook** — before each turn, injects a banner showing
-  current stage, pipeline progress, and what to do next
-- **`post_tool_call` hook** — tracks stage transitions and active task
-- **Stage validation** — each tool checks you're in the correct stage
-  before spawning a subagent
+Drive a structured 4-phase development workflow where each phase delegates to a focused subagent.
+Hooks inject stage guidance before every LLM turn so the agent never loses track of progress.
+The output is a verified, simplified commit produced by the pipeline subagents.
 
-This follows the "soft enforcement / adaptive nudge" pattern:
-the agent always knows its stage, but is never forced.
+## Acceptance Criteria
 
-## Phase 0: Planning (You — the main agent)
+- Each phase transitions through validated stages: idle → implement → verify → simplify → done
+- Stage validation rejects out-of-order tool calls with a clear error message
+- Stage guidance banner appears before each LLM turn when a pipeline task is active
+- Direct Delegate Pattern documented as escape hatch when in-memory state is stale
 
-**Do not start implementing until the user confirms the plan.**
+## Core Principles
 
-1. **Clarify requirements** — Use `clarify` to ask 1-3 questions per round.
-   Cover: Scope, Business flow, Constraints, Business value.
+- **Soft enforcement, not hard blocks.** Hooks remind the agent of the current stage; handlers validate stage transitions. The agent can always override by using the Direct Delegate Pattern.
+- **One concern per subagent.** Implement writes code. Verify adversarially tests and fixes. Simplify restructures without behaviour change. No subagent does another's job.
+- **Path A (subagent) by default, Path B (direct) when the context is already loaded.** The decision to delegate is a cost/quality trade-off, not a rule.
 
-2. **Build a checklist** — Structured business requirements the user can
-   say yes/no to.
+## Workflow
 
-3. **Research** — Use `web_search` if you need up-to-date information
-   (API docs, package versions, known issues).
+### Phase 0: Planning — before any tool call
 
-4. **Confirm** — Present the checklist to the user with `clarify`.
-   Wait for explicit confirmation before Phase 1.
+1. **Clarify requirements** with `clarify` (1-3 questions per round: scope, business flow, constraints, value).
+2. **Build a checklist** of structured business requirements.
+3. **Research** with `web_search` if needed (API docs, package versions, known issues).
+4. **Confirm** the checklist with the user.
+   - **User accepts** → proceed to Phase 1.
+   - **User rejects or requests changes** → loop back to step 1 (re-clarify) or step 2 (amend checklist). Do NOT proceed to Phase 1 until explicit confirmation.
+   - **User cancels entirely** → stop. No task is created. Save any collected context for reference.
 
-## Phase 1: Implement
+### Phase 1: Implement — stage: idle → implement
 
-**Stage constraint:** No active task required (stage must be idle/done).
+**Stage constraint:** No active pipeline task (stage must be idle or done).
 
-### Path A — Subagent (default): Call `jovaltus_implement`
+**Pre-flight:** Check `git status --porcelain`. If the working tree has uncommitted changes, warn the user and suggest stashing or committing before proceeding. A dirty baseline corrupts the verification diff.
 
-Pass `project_dir` if not the cwd. Spawns an implement subagent that writes
-the code and auto-commits. Wait for the result and review the summary.
+Choose the implementation path:
 
-**Use Path A when:**
-- The change spans multiple files with complex interdependencies
-- You lack deep context — a subagent needs to explore the codebase
-- The task involves significant reasoning (algorithm design, data model
-  changes, refactoring with side effects)
-- You want an independent checkpoint commit from a focused worker
+- **Path A (default) — Call `jovaltus_implement`** when the change spans multiple files, needs codebase exploration, or involves significant reasoning. The implement subagent auto-commits.
+- **Path B — Implement directly** when the change is well-scoped, self-contained, mechanical, and you already hold full context. Skip the subagent but still satisfy the verification checks (tests, lint, type-check, edge-case review) before moving on.
 
-### Path B — Direct: implement yourself
+### Phase 2: Verify & Fix — stage: implement → verify
 
-Write the code directly without spawning a subagent.
+**Stage constraint:** Requires stage "implement". Call `jovaltus_verify(task_id=...)`.
 
-**Use Path B when all of these hold:**
-- The change is **well-scoped and self-contained** (single file, clear
-  before/after shape, no hidden ripple effects)
-- You already have full context — you've read all relevant files and
-  understand the architecture well enough that a subagent would need to
-  re-discover everything you already hold
-- The task is **mechanical** rather than reasoning-heavy (add a CLI command
-  that follows an existing pattern, rename, format migration)
+The verification subagent runs tests adversarially, reviews the diff for bugs, fixes everything found, and re-verifies until clean. It has write access and commits when done.
 
-When implementing directly, still follow the Verification Checklist below
-(run tests, lint, type-check, review for edge cases) before claiming
-completion. No commit is required until Phase 2 is satisfied.
+### Phase 3: Simplify — stage: verify → simplify
 
-## Phase 2: Verify & Fix
+**Stage constraint:** Requires stage "verify". Call `jovaltus_simplify(task_id=...)`.
 
-**Stage constraint:** Requires stage "implement". Call `jovaltus_verify`
-with the `task_id` from Phase 1.
+The simplifier subagent applies structural improvements without behaviour change: extract repeated code, delete dead code (grep-backed), flatten nesting, improve naming. After simplification, run `pytest` (or the project's test framework) to confirm behaviour is preserved. Subagent commits when done.
 
-1. **Call `jovaltus_verify`** — Pass the `task_id` from Phase 1.
-   This computes the diff, spawns a verification subagent with write access
-   that runs tests adversarially, finds bugs, fixes them, and commits.
+### Afterwards
 
-2. **Wait for the subagent result** — Note what issues were found and fixed.
+Present the final result: what was implemented, what issues were found and fixed during verification, what was simplified, any notable decisions. Ask if the user wants to start a new task or adjust.
 
-## Phase 3: Simplify
+## Gotchas
 
-**Stage constraint:** Requires stage "verify". Call `jovaltus_simplify`
-with the `task_id` from Phase 1.
+- **Dirty working tree corrupts the verification diff.** The pipeline records `git rev-parse HEAD` as the baseline. If the working tree has uncommitted changes before Phase 1, those changes are included in the `start_hash..HEAD` diff — the verification subagent will inspect and potentially "fix" code it didn't write. Always check `git status --porcelain` before starting Phase 1.
+- **In-memory state is process-local.** Task IDs and stage tracking live in plugin memory. If the agent process restarts or you commit changes via `git` directly (not through the tools), the task state is lost and the stage becomes unknown. The hooks will stop injecting guidance.
+- **Escape hatch — Direct Delegate Pattern.** When state is stale, bypass the tools entirely: read the prompt file (`prompts/verify.md` or `prompts/simplify.md`), compute the correct baseline diff (`git diff <original_baseline>..HEAD`), and call `delegate_task(goal=<prompt>, context=<diff context>, toolsets=["terminal", "file"])`. This gives full control over the baseline and avoids the state dependency. If the original baseline is unknown, use `HEAD~1` as a heuristic.
+- **Subagent crash mid-phase leaves partial changes.** If a subagent fails mid-flight, the working tree may contain incomplete edits. The pipeline does NOT auto-rollback. Manually run `git checkout -- .` or `git reset --hard HEAD` to discard partial changes before retrying. Verify with `git status` after cleanup.
+- **Verify fix loop has no iteration cap.** The verification subagent retries until all checks pass. If a bug is genuinely unfixable (broken test fixture, upstream API change), the loop may diverge. If you see more than 3-4 retry cycles, intervene manually.
+- **Stage validation is not a security boundary.** A determined agent can always call `delegate_task` directly. The stage machine is a productivity guide, not a guard.
+- **pre_llm_call hook injects on every turn.** When a pipeline task is active, every LLM turn gets the stage banner. This keeps the agent oriented but costs a small amount of input context. To stop the injection, complete or reset the task.
 
-1. **Call `jovaltus_simplify`** — Pass the `task_id` from Phase 1.
-   This computes the clean diff, spawns a simplifier subagent that applies
-   structural improvements (extract duplicates > delete dead code > flatten
-   nesting > improve naming). Behaviour is strictly preserved.
+## References
 
-2. **Wait for the subagent result** — Note what was simplified.
-
-## Afterwards
-
-Present the final result to the user:
-- What was implemented
-- What issues were found and fixed during verification
-- What was simplified
-- Any notable decisions or trade-offs
-
-Then ask if they'd like to start a new task or adjust anything.
+- `prompts/implement.md` — Implement subagent system prompt
+- `prompts/verify.md` — Verification subagent system prompt (includes adversarial checklist)
+- `prompts/simplify.md` — Simplifier subagent system prompt (includes simplification checklist)
+- Hermes tool: `jovaltus_implement` — spawns implement subagent
+- Hermes tool: `jovaltus_verify` — spawns verify subagent
+- Hermes tool: `jovaltus_simplify` — spawns simplify subagent
