@@ -646,10 +646,15 @@ def _jovaltus_command(args: Any) -> None:
 
 def _setup_argparse(subparser: Any) -> None:
     """Build argparse subcommand tree for 'hermes jovaltus'."""
-    # Remove argparse's default -h/--help so we can provide richer help output
+    # Remove argparse's default -h/--help so we can provide richer help output.
+    # _remove_action() only cleans _actions, NOT _option_string_actions —
+    # we must clear both to avoid 'conflicting option strings' when adding
+    # our custom -h/--help flag below.
     for action in list(subparser._actions):
         opts = getattr(action, "option_strings", [])
         if "-h" in opts or "--help" in opts:
+            for opt in opts:
+                subparser._option_string_actions.pop(opt, None)
             subparser._remove_action(action)
             break
 
