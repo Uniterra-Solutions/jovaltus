@@ -147,32 +147,81 @@ Subagent works in background:
 
 ## Installation and Usage
 
-### Install
+### Step 1: Install the Plugin
 
 ```bash
-# From GitHub
+# 從 GitHub 安裝
 hermes plugins install LaiTszKin/jovaltus --enable
 ```
 
-### Setup (creates the jovaltus-agent profile)
+### Step 2: 啟用 Plugin
 
 ```bash
+hermes plugins enable jovaltus
+```
+
+### Step 3: 建立 Profile
+
+```bash
+# 一鍵建立 jovaltus-agent profile
 hermes jovaltus setup
 ```
 
-### Daily Use
+> Profile 建立後，編輯 `~/.hermes/profiles/jovaltus-agent/config.yaml`，
+> 確認 model 設定與 root config 一致（若無則複製貼上）：
+> ```yaml
+> model:
+>   default: deepseek-v4-flash
+>   provider: deepseek
+> ```
+> 若不確定 root 設定，執行：`grep -A2 "^model:" ~/.hermes/config.yaml`
+
+### Step 4: 連結 Plugin 到 Profile
 
 ```bash
-# Start a session in Agent Mode
+# 將 plugin 原始碼連結到 profile 的 plugins 目錄
+ln -s /Users/tszkinlai/uniterra/jovaltus ~/.hermes/profiles/jovaltus-agent/plugins/jovaltus
+```
+
+> **為什麼需要這步？** 當使用 `hermes -p <profile>` 啟動 session 時，
+> Hermes 只掃描 profile 目錄底下的 plugins，不會掃描全域 `~/.hermes/plugins/`。
+> 因此 plugin 必須存在於 profile 的 plugins 子目錄中才會被載入。
+
+### Step 5: 確認安裝
+
+```bash
+# 啟動 session 並測試工具是否可用
 hermes -p jovaltus-agent
 
-# Works in any project directory — profile is not directory-bound
+# 在 session 中輸入：
+# 「list all tools whose name starts with jovaltus」
+#
+# 應該看到：
+# - jovaltus_implement
+# - jovaltus_verify
+# - jovaltus_simplify
+```
+
+### 日常使用
+
+```bash
+# 在任何專案目錄下啟動
 cd /projects/app-alpha
 hermes -p jovaltus-agent
 
+# Profile 不綁定目錄 — 同一 profile 可在不同 project 使用
 cd /projects/app-beta
 hermes -p jovaltus-agent
 ```
+
+### 疑難排解
+
+| 問題 | 解法 |
+|------|------|
+| `Unknown toolset 'jovaltus'` | Plugin 未正確載入。檢查 Step 4 的 symlink 是否存在 |
+| 工具列表沒有 `jovaltus_*` | 確認 profile config 有 `plugins.enabled: [jovaltus]` |
+| `No inference provider configured` | Profile config 缺少 model 設定。參考 Step 3 補上 |
+| 401 Authentication Error | 確認 profile 的 `.env` 有 API key。複製 root 的：`grep DEEPSEEK ~/.hermes/.env >> ~/.hermes/profiles/jovaltus-agent/.env` |
 
 ---
 
