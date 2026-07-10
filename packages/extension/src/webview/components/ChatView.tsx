@@ -7,7 +7,8 @@ import {
 } from '@assistant-ui/react';
 import { MarkdownTextPrimitive } from '@assistant-ui/react-markdown';
 import { ToolCallDisplay } from './ToolCallDisplay.js';
-import { ModelSelector, type ModelOption } from './ModelSelector.js';
+import { ModelSelector } from './ModelSelector.js';
+import type { ModelOption } from '../init-models.js';
 
 interface ChatViewProps {
   readonly currentModelId: string;

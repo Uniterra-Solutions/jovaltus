@@ -1,5 +1,5 @@
 import type { ConfigProvider, JovaltusConfig, ModelConfig, ProviderConfig } from './types.js';
-import { DEFAULT_CONFIG } from './defaults.js';
+import { DEFAULT_CONFIG, PROVIDER_DEFAULT_BASE_URLS } from './defaults.js';
 import { resolveContextWindow } from './context-window.js';
 
 type DeepPartial<T> = {
@@ -16,30 +16,29 @@ export class ConfigManager {
   }
 
   public getConfig(): JovaltusConfig {
+    const provider: 'openai' | 'anthropic' =
+      this.overrides.provider ?? this.provider.get('jovaltus.provider', DEFAULT_CONFIG.provider);
+    // Empty baseUrl falls back to the selected provider's standard endpoint.
+    const baseUrl =
+      (this.overrides.baseUrl ?? this.provider.get('jovaltus.baseUrl', '')) ||
+      PROVIDER_DEFAULT_BASE_URLS[provider];
+
     return {
+      provider,
+      baseUrl,
+      apiKey: this.overrides.apiKey ?? this.provider.get('jovaltus.apiKey', DEFAULT_CONFIG.apiKey),
       coordinatorModel: this.resolveModelConfig('coordinatorModel'),
       workerModel: this.resolveModelConfig('workerModel'),
-      openai: this.getProviderConfig('openai'),
-      anthropic: this.getProviderConfig('anthropic'),
     };
   }
 
-  public getProviderConfig(protocol: 'openai' | 'anthropic'): ProviderConfig {
-    const defaults = DEFAULT_CONFIG[protocol];
-    const override = this.overrides[protocol];
-
-    return {
-      baseUrl:
-        override?.baseUrl ?? this.provider.get(`jovaltus.${protocol}.baseUrl`, defaults.baseUrl),
-      apiKey: override?.apiKey ?? this.provider.get(`jovaltus.${protocol}.apiKey`, defaults.apiKey),
-    };
+  public getProviderConfig(): ProviderConfig {
+    const config = this.getConfig();
+    return { baseUrl: config.baseUrl, apiKey: config.apiKey };
   }
 
-  public async resolveModelContextWindow(
-    modelConfig: ModelConfig,
-    protocol: 'openai' | 'anthropic',
-  ): Promise<number> {
-    const { baseUrl, apiKey } = this.getProviderConfig(protocol);
+  public async resolveModelContextWindow(modelConfig: ModelConfig): Promise<number> {
+    const { baseUrl, apiKey } = this.getProviderConfig();
     return resolveContextWindow(modelConfig.modelId, modelConfig.contextWindow, baseUrl, apiKey);
   }
 

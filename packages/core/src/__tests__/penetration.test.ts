@@ -45,10 +45,11 @@ function ctx(args: Record<string, unknown>): BeforeToolCallContext {
 }
 
 const TEST_CONFIG: JovaltusConfig = {
+  provider: 'anthropic',
+  baseUrl: 'https://api.anthropic.com',
+  apiKey: 'test-key',
   coordinatorModel: { modelId: 'claude-sonnet-4-5', contextWindow: 200_000, maxTokens: 4096 },
   workerModel: { modelId: 'claude-haiku-4-5', contextWindow: 200_000, maxTokens: 4096 },
-  openai: { baseUrl: 'https://api.openai.com/v1', apiKey: 'test-key' },
-  anthropic: { baseUrl: 'https://api.anthropic.com', apiKey: 'test-key' },
 };
 
 // ── restrictToDirectory ─────────────────────────────────────────────
@@ -296,16 +297,15 @@ describe('tools — penetration', () => {
 // ── createAgent — edge cases ──────────────────────────────────────────
 
 describe('createAgent — penetration', () => {
-  it('FINDING: non-claude modelId silently treated as openai (no validation)', () => {
-    // inferProvider treats anything not containing "claude" as "openai" provider.
-    // A typo like "gpt-55" or "deepseek-v4" creates an agent without error,
-    // because the model is registered with the openai provider — even if
-    // it doesn't actually exist at the provider.
+  it('FINDING: any modelId is accepted under the selected provider (no validation)', () => {
+    // Models register under config.provider regardless of name — an arbitrary
+    // modelId like "gpt-5-fake" is accepted without checking it exists.
     const config: JovaltusConfig = {
       ...TEST_CONFIG,
+      provider: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
       coordinatorModel: { modelId: 'gpt-5-fake', contextWindow: 200_000, maxTokens: 4096 },
     };
-    // No throw — model is registered with openai provider silently
     const agent = createAgent(
       { role: 'coordinator', systemPrompt: 'test', tools: [readTool] },
       config,

@@ -39,40 +39,35 @@ describe('ConfigManager', () => {
     expect(cfg.workerModel.contextWindow).toBe(32000);
   });
 
-  it('reads OpenAI base URL and API key (item 4)', () => {
+  it('reads baseUrl and apiKey for the selected provider', () => {
     const mgr = new ConfigManager(
       provider({
-        'jovaltus.openai.baseUrl': 'https://custom.openai.com/v1',
-        'jovaltus.openai.apiKey': 'sk-test',
+        'jovaltus.baseUrl': 'https://custom.example.com/v1',
+        'jovaltus.apiKey': 'sk-test',
       }),
     );
 
     const cfg = mgr.getConfig();
-    expect(cfg.openai.baseUrl).toBe('https://custom.openai.com/v1');
-    expect(cfg.openai.apiKey).toBe('sk-test');
+    expect(cfg.baseUrl).toBe('https://custom.example.com/v1');
+    expect(cfg.apiKey).toBe('sk-test');
   });
 
-  it('reads Anthropic base URL and API key (item 4)', () => {
-    const mgr = new ConfigManager(
-      provider({
-        'jovaltus.anthropic.baseUrl': 'https://custom.anthropic.com',
-        'jovaltus.anthropic.apiKey': 'ant-test',
-      }),
-    );
+  it('falls back to the provider default endpoint when baseUrl is empty', () => {
+    const anthropic = new ConfigManager(provider({})).getConfig();
+    expect(anthropic.provider).toBe('anthropic');
+    expect(anthropic.baseUrl).toBe('https://api.anthropic.com');
 
-    const cfg = mgr.getConfig();
-    expect(cfg.anthropic.baseUrl).toBe('https://custom.anthropic.com');
-    expect(cfg.anthropic.apiKey).toBe('ant-test');
+    const openai = new ConfigManager(provider({ 'jovaltus.provider': 'openai' })).getConfig();
+    expect(openai.provider).toBe('openai');
+    expect(openai.baseUrl).toBe('https://api.openai.com/v1');
   });
 
-  it('falls back to defaults when no provider values set', () => {
-    const mgr = new ConfigManager(provider({}));
-    const cfg = mgr.getConfig();
+  it('falls back to model/key defaults when nothing is set', () => {
+    const cfg = new ConfigManager(provider({})).getConfig();
 
     expect(cfg.coordinatorModel.modelId).toBe('claude-sonnet-4-5');
     expect(cfg.workerModel.modelId).toBe('claude-haiku-4-5');
-    expect(cfg.openai.baseUrl).toBe('https://api.openai.com/v1');
-    expect(cfg.anthropic.baseUrl).toBe('https://api.anthropic.com');
+    expect(cfg.apiKey).toBe('');
   });
 
   it('programmatic overrides take highest priority', () => {
@@ -92,7 +87,7 @@ describe('ConfigManager', () => {
     };
 
     const mgr = new ConfigManager(provider({}));
-    const window = await mgr.resolveModelContextWindow(modelConfig, 'openai');
+    const window = await mgr.resolveModelContextWindow(modelConfig);
     expect(window).toBe(42_000);
   });
 });

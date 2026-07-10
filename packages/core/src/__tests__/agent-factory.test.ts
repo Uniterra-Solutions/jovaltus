@@ -4,10 +4,11 @@ import { readTool } from '../agent/tools/read.js';
 import type { JovaltusConfig } from '../config/types.js';
 
 const testConfig: JovaltusConfig = {
+  provider: 'anthropic',
+  baseUrl: 'https://api.anthropic.com',
+  apiKey: 'test-anthropic-key',
   coordinatorModel: { modelId: 'claude-sonnet-4-5', contextWindow: 200_000, maxTokens: 4096 },
   workerModel: { modelId: 'claude-haiku-4-5', contextWindow: 200_000, maxTokens: 4096 },
-  openai: { baseUrl: 'https://api.openai.com/v1', apiKey: 'test-openai-key' },
-  anthropic: { baseUrl: 'https://api.anthropic.com', apiKey: 'test-anthropic-key' },
 };
 
 describe('createAgent', () => {

@@ -9,16 +9,12 @@ import { anthropicMessagesApi } from '@earendil-works/pi-ai/api/anthropic-messag
 import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy';
 import { Agent } from '@earendil-works/pi-agent-core';
 
-import type { JovaltusConfig, ModelConfig } from '../config/types.js';
+import type { JovaltusConfig, ModelConfig, ProviderConfig } from '../config/types.js';
 import type { CreateAgentOptions } from './types.js';
 import type { TSchema } from '@sinclair/typebox';
 import { generateJsonExample } from './output-validation.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────
-
-function inferProvider(modelId: string): 'anthropic' | 'openai' {
-  return modelId.toLowerCase().includes('claude') ? 'anthropic' : 'openai';
-}
 
 function toPiModel(mc: ModelConfig, provider: 'anthropic' | 'openai'): Model<Api> {
   return {
@@ -65,39 +61,34 @@ const NAMES = { anthropic: 'Anthropic', openai: 'OpenAI' } as const;
 
 export function createModelRegistry(config: JovaltusConfig): MutableModels {
   const models = createModels();
-  const providers = { anthropic: config.anthropic, openai: config.openai } as const;
+  const pc: ProviderConfig = { baseUrl: config.baseUrl, apiKey: config.apiKey };
   const roleConfigs = [config.coordinatorModel, config.workerModel];
+  const p = config.provider;
 
-  for (const p of ['anthropic', 'openai'] as const) {
-    const matched = roleConfigs.filter((mc) => inferProvider(mc.modelId) === p);
-    if (!matched.length) continue;
-
-    const pc = providers[p];
-    models.setProvider(
-      createProvider({
-        id: p,
-        name: NAMES[p],
-        baseUrl: pc.baseUrl || undefined,
-        auth: {
-          apiKey: {
-            name: `${NAMES[p]} API key`,
-            resolve: () =>
-              pc.apiKey
-                ? Promise.resolve({ auth: { apiKey: pc.apiKey }, source: 'jovaltus config' })
-                : Promise.resolve(undefined),
-          },
+  models.setProvider(
+    createProvider({
+      id: p,
+      name: NAMES[p],
+      baseUrl: pc.baseUrl || undefined,
+      auth: {
+        apiKey: {
+          name: `${NAMES[p]} API key`,
+          resolve: () =>
+            pc.apiKey
+              ? Promise.resolve({ auth: { apiKey: pc.apiKey }, source: 'jovaltus config' })
+              : Promise.resolve(undefined),
         },
-        models: matched.map((mc) => toPiModel(mc, p)),
-        api: APIS[p],
-      }),
-    );
-  }
+      },
+      models: roleConfigs.map((mc) => toPiModel(mc, p)),
+      api: APIS[p],
+    }),
+  );
   return models;
 }
 
 export function createAgent(options: CreateAgentOptions, config: JovaltusConfig): Agent {
   const modelConfig = options.role === 'coordinator' ? config.coordinatorModel : config.workerModel;
-  const provider = inferProvider(modelConfig.modelId);
+  const provider = config.provider;
 
   const models = createModelRegistry(config);
   const model = models.getModel(provider, modelConfig.modelId);

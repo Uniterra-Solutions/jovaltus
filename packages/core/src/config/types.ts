@@ -10,10 +10,11 @@ export interface ModelConfig {
 }
 
 export interface JovaltusConfig {
+  readonly provider: 'openai' | 'anthropic';
+  readonly baseUrl: string;
+  readonly apiKey: string;
   readonly coordinatorModel: ModelConfig;
   readonly workerModel: ModelConfig;
-  readonly openai: ProviderConfig;
-  readonly anthropic: ProviderConfig;
 }
 
 export interface ConfigProvider {

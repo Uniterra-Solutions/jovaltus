@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'node:fs';
 import { ConfigManager, AgentModeOrchestrator } from '@jovaltus/core';
-import type { AgentModeEvent, ConfigProvider } from '@jovaltus/core';
+import type { AgentModeEvent, ConfigProvider, JovaltusConfig } from '@jovaltus/core';
 
 const PHASE_LABELS: Record<string, string> = {
   implementation: 'Implementing changes',
@@ -10,19 +10,68 @@ const PHASE_LABELS: Record<string, string> = {
   simplification: 'Simplifying code',
 };
 
-function loadWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
-  const indexPath = vscode.Uri.joinPath(extensionUri, 'dist', 'webview', 'index.html');
-  let html = fs.readFileSync(indexPath.fsPath, 'utf-8');
-  const baseUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'dist', 'webview'));
-  html = html.replace(
+/** Rewrite absolute `/assets/` URLs to webview-resource URIs and inject a CSP meta. Pure & testable. */
+export function buildWebviewHtml(html: string, baseUri: string, cspSource: string): string {
+  const base = `${baseUri.replace(/\/$/, '')}/`;
+  const rewritten = html.replace(
     /(src|href)="\/assets\/([^"]+)"/g,
-    (_match, attr: string, file: string) => `${attr}="${String(baseUri)}assets/${file}"`,
+    (_match, attr: string, file: string) => `${attr}="${base}assets/${file}"`,
   );
-  html = html.replace(
+  return rewritten.replace(
     '</head>',
-    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} https:; font-src ${webview.cspSource}; connect-src ${webview.cspSource};"></head>`,
+    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src ${cspSource}; style-src ${cspSource} 'unsafe-inline'; img-src ${cspSource} https:; font-src ${cspSource}; connect-src ${cspSource};"></head>`,
   );
-  return html;
+}
+
+/** Escape a string for safe inclusion in a double-quoted HTML attribute value. */
+function escapeAttr(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+/** Model option shape shared with the webview's ModelSelector. */
+interface ModelOptionPayload {
+  readonly id: string;
+  readonly provider: string;
+}
+
+/**
+ * Inject a `<meta name="jovaltus-init">` carrying the model list + default model as JSON,
+ * so the webview renders its model selector from the user's config without a message round-trip.
+ * Pure & testable.
+ */
+export function injectInitMeta(
+  html: string,
+  models: readonly ModelOptionPayload[],
+  defaultModelId: string,
+): string {
+  const payload = escapeAttr(JSON.stringify({ models, defaultModelId }));
+  return html.replace('</head>', `<meta name="jovaltus-init" content="${payload}"></head>`);
+}
+
+/** Build the deduped model option list from config: coordinator first, then worker. */
+function buildModelOptions(config: JovaltusConfig): ModelOptionPayload[] {
+  const seen = new Set<string>();
+  const models: ModelOptionPayload[] = [];
+  for (const modelId of [config.coordinatorModel.modelId, config.workerModel.modelId]) {
+    if (!seen.has(modelId)) {
+      seen.add(modelId);
+      models.push({ id: modelId, provider: config.provider });
+    }
+  }
+  return models;
+}
+
+function loadWebviewHtml(
+  webview: vscode.Webview,
+  extensionUri: vscode.Uri,
+  models: readonly ModelOptionPayload[],
+  defaultModelId: string,
+): string {
+  const indexPath = vscode.Uri.joinPath(extensionUri, 'dist', 'webview', 'index.html');
+  const html = fs.readFileSync(indexPath.fsPath, 'utf-8');
+  const baseUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'dist', 'webview'));
+  const withAssets = buildWebviewHtml(html, String(baseUri), webview.cspSource);
+  return injectInitMeta(withAssets, models, defaultModelId);
 }
 
 export class ChatPanelProvider implements vscode.WebviewViewProvider {
@@ -38,7 +87,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       enableScripts: true,
       localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview')],
     };
-    webviewView.webview.html = loadWebviewHtml(webviewView.webview, this.extensionUri);
+    const config = new ConfigManager(this.configProvider).getConfig();
+    const models = buildModelOptions(config);
+    webviewView.webview.html = loadWebviewHtml(
+      webviewView.webview,
+      this.extensionUri,
+      models,
+      config.coordinatorModel.modelId,
+    );
 
     webviewView.webview.onDidReceiveMessage(
       (message: { readonly type: string; readonly text?: string; readonly modelId?: string }) => {

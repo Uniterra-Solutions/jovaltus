@@ -2,24 +2,24 @@ import { useState } from 'react';
 import { useLocalRuntime, AssistantRuntimeProvider } from '@assistant-ui/react';
 import { createJovaltusAdapter } from './chat-adapter.js';
 import { ChatView } from './components/ChatView.js';
-import type { ModelOption } from './components/ModelSelector.js';
+import { parseInitMeta, type InitModels } from './init-models.js';
 
-const MODELS: readonly ModelOption[] = [
-  { id: 'claude-sonnet-4-5', provider: 'anthropic' },
-  { id: 'claude-haiku-4-5', provider: 'anthropic' },
-  { id: 'gpt-4o', provider: 'openai' },
-  { id: 'gpt-4o-mini', provider: 'openai' },
-];
+/** Read the host-injected model list + default from the jovaltus-init meta tag. */
+function readInitModels(): InitModels {
+  const meta = document.querySelector('meta[name="jovaltus-init"]');
+  return parseInitMeta(meta?.getAttribute('content')) ?? { models: [], defaultModelId: '' };
+}
 
 export function App(): React.JSX.Element {
-  const [currentModelId, setCurrentModelId] = useState('claude-sonnet-4-5');
+  const [init] = useState<InitModels>(readInitModels);
+  const [currentModelId, setCurrentModelId] = useState(init.defaultModelId);
   const runtime = useLocalRuntime(createJovaltusAdapter());
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ChatView
         currentModelId={currentModelId}
-        availableModels={MODELS}
+        availableModels={init.models}
         onModelChange={(modelId) => {
           setCurrentModelId(modelId);
           acquireVsCodeApi().postMessage({ type: 'modelSwitch', modelId });

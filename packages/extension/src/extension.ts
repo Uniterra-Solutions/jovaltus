@@ -7,13 +7,10 @@ export function activate(context: vscode.ExtensionContext): void {
   const secrets = new JovaltusSecrets(context);
   void secrets.migrateFromConfig();
 
-  // Eager-load API keys so config provider has them synchronously
+  // Eager-load the API key so config provider has it synchronously
   const secretKeys = new Map<string, string>();
-  void secrets.getApiKey('openai').then((k) => {
-    if (k) secretKeys.set('openai.apiKey', k);
-  });
-  void secrets.getApiKey('anthropic').then((k) => {
-    if (k) secretKeys.set('anthropic.apiKey', k);
+  void secrets.getApiKey().then((k) => {
+    if (k) secretKeys.set('apiKey', k);
   });
 
   const provider = new ChatPanelProvider(

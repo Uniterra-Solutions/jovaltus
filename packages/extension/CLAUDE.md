@@ -12,10 +12,12 @@ VS Code extension providing the Jovaltus chat sidebar panel and bridging VS Code
 - `src/webview/` — React + assistant-ui webview application (Vite-bundled, tsc-excluded)
   - `src/webview/index.html` — HTML entry point
   - `src/webview/main.tsx` — React entry, renders `<App />`
-  - `src/webview/App.tsx` — Root component: `useLocalRuntime` + `AssistantRuntimeProvider` + model state
+  - `src/webview/App.tsx` — Root component: `useLocalRuntime` + `AssistantRuntimeProvider` + model state driven by the host-injected `jovaltus-init` meta
+  - `src/webview/init-models.ts` — `parseInitMeta()` + `InitModels` type — pure parser for the host-injected model list + default (read from a `<meta>` tag, no message round-trip)
   - `src/webview/vscode-bridge.ts` — `createVSCodeEventStream()` — Promise-based async iterable bridging postMessage events
   - `src/webview/chat-adapter.ts` — `createJovaltusAdapter()` — `ChatModelAdapter` converting orchestrator events → assistant-ui content chunks
   - `src/webview/__tests__/vscode-bridge.test.ts` — JSDOM tests for event stream async iteration + abort
+  - `src/webview/__tests__/init-models.test.ts` — Unit tests for `parseInitMeta` (valid / empty / malformed / shape / entry filtering)
   - `src/webview/__tests__/chat-adapter.test.ts` — JSDOM tests for adapter content conversion (streamDelta, toolCall, agentError, agentComplete)
   - `src/webview/components/ChatView.tsx` — Main chat view: `ThreadPrimitive`, `ComposerPrimitive`, `MessagePrimitive` with grouped tool-call parts
   - `src/webview/components/ToolCallDisplay.tsx` — Collapsible tool call card (name, args, result, error state)

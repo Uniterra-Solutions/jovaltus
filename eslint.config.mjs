@@ -3,7 +3,7 @@ import js from '@eslint/js';
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/', '**/node_modules/', 'eslint.config.mjs', 'vitest.config.ts', 'resources/', '**/vite.config.ts', '**/*.webview.json'],
+    ignores: ['**/dist/', '**/node_modules/', 'eslint.config.mjs', 'vitest.config.ts', 'resources/', '**/vite.config.ts', '**/build.mjs', '**/*.webview.json'],
   },
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked,

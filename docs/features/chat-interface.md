@@ -48,8 +48,12 @@
 ## 模型選擇
 
 - **Given** 聊天面板已開啟
-- **When** 使用者點擊頂部模型下拉選單
-- **Then** 顯示可用模型列表（Anthropic / OpenAI 協定），選擇後發送 `modelSwitch` 訊息至 extension host，下一個對話請求將使用新模型
+- **When** 面板初始化
+- **Then** extension host 從使用者設定讀取 coordinator 與 worker 的 model ID，透過 `<meta name="jovaltus-init">` 注入 webview HTML（`chat-panel.ts:52-97`）。webview 的 `init-models.ts` 解析該 meta 標籤取得模型列表與預設值（`init-models.ts:27-48`），`App.tsx` 驅動 `ModelSelector` 下拉選單顯示這些模型。預設選取 coordinator 模型
+
+- **Given** 使用者點擊頂部模型下拉選單
+- **When** 使用者在聊天介面中選擇不同模型
+- **Then** 發送 `modelSwitch` 訊息至 extension host，下一個對話請求將使用新模型
 
 ## 主題適應
 

@@ -15,6 +15,8 @@
 - **Tools**：控制代理可執行的操作集合（唯讀、讀寫、驗證三種等級）
 - **OutputSchema**（可選）：設定後自動在 system prompt 中注入 JSON 格式範例，並透過 `onPayload` hook 對 OpenAI 相容 provider 注入 `response_format: {type: "json_object"}`。呼叫端使用 `promptWithValidation()` 進行 TypeBox 驗證 + 欄位錯誤回饋 + 自動重試（最多 3 次）
 
+`createModelRegistry()` 根據 `config.provider` 只註冊所選單一 provider 的模型（coordinator 與 worker 各一個），而非兩邊都註冊。`createAgent()` 直接使用 `config.provider` 決定 API 協議。來源：`packages/core/src/agent/factory.ts:62-87`
+
 代理角色分為兩級：`coordinator`（協調者，使用較高能力模型進行決策）與 `worker`（工作者，使用較低成本模型進行實作）。
 
 ## 雙通道模型抽象

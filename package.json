@@ -5,13 +5,13 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && pnpm --filter ./packages/extension run build",
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "package": "pnpm --filter jovaltus run package",
+    "package": "pnpm run build && pnpm --filter ./packages/extension run package",
     "prepare": "husky"
   },
   "devDependencies": {

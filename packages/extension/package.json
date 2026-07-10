@@ -33,9 +33,36 @@
     "configuration": {
       "title": "Jovaltus",
       "properties": {
+        "jovaltus.provider": {
+          "type": "string",
+          "enum": [
+            "anthropic",
+            "openai"
+          ],
+          "enumDescriptions": [
+            "Anthropic-compatible API",
+            "OpenAI-compatible API"
+          ],
+          "default": "anthropic",
+          "order": 1,
+          "description": "API provider for model access"
+        },
+        "jovaltus.baseUrl": {
+          "type": "string",
+          "default": "",
+          "order": 2,
+          "description": "Base URL for the selected provider's API. Leave empty to use the default endpoint (OpenAI: https://api.openai.com/v1, Anthropic: https://api.anthropic.com)."
+        },
+        "jovaltus.apiKey": {
+          "type": "string",
+          "default": "",
+          "order": 3,
+          "description": "API key for the selected provider. Stored securely in SecretStorage."
+        },
         "jovaltus.coordinatorModel.modelId": {
           "type": "string",
           "default": "claude-sonnet-4-5",
+          "order": 4,
           "description": "Model ID for coordinator agents (planning, reviewing, verifying)"
         },
         "jovaltus.coordinatorModel.contextWindow": {
@@ -44,16 +71,19 @@
             "string"
           ],
           "default": "auto",
+          "order": 5,
           "description": "Context window size. Use 'auto' for automatic discovery or set a number."
         },
         "jovaltus.coordinatorModel.maxTokens": {
           "type": "number",
           "default": 4096,
+          "order": 6,
           "description": "Maximum output tokens for coordinator model"
         },
         "jovaltus.workerModel.modelId": {
           "type": "string",
           "default": "claude-haiku-4-5",
+          "order": 7,
           "description": "Model ID for worker agents (implementation, fixing, simplifying)"
         },
         "jovaltus.workerModel.contextWindow": {
@@ -62,38 +92,21 @@
             "string"
           ],
           "default": "auto",
+          "order": 8,
           "description": "Context window size. Use 'auto' for automatic discovery or set a number."
         },
         "jovaltus.workerModel.maxTokens": {
           "type": "number",
           "default": 4096,
+          "order": 9,
           "description": "Maximum output tokens for worker model"
-        },
-        "jovaltus.openai.baseUrl": {
-          "type": "string",
-          "default": "https://api.openai.com/v1",
-          "description": "Base URL for OpenAI-compatible API endpoint"
-        },
-        "jovaltus.openai.apiKey": {
-          "type": "string",
-          "default": "",
-          "description": "API key for OpenAI-compatible API"
-        },
-        "jovaltus.anthropic.baseUrl": {
-          "type": "string",
-          "default": "https://api.anthropic.com",
-          "description": "Base URL for Anthropic-compatible API endpoint"
-        },
-        "jovaltus.anthropic.apiKey": {
-          "type": "string",
-          "default": "",
-          "description": "API key for Anthropic-compatible API"
         }
       }
     }
   },
   "scripts": {
-    "build": "tsc -b && vite build",
+    "build": "node build.mjs && vite build",
+    "build:bundle": "node build.mjs",
     "build:webview": "vite build",
     "watch": "tsc -b -w",
     "package": "vsce package --no-dependencies"
@@ -111,6 +124,7 @@
     "@types/vscode": "^1.95.0",
     "@vitejs/plugin-react": "^6.0.0",
     "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.28.1",
     "jsdom": "^29.1.1",
     "vite": "^8.0.0"
   }

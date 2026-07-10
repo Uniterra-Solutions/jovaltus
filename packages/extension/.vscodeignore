@@ -1,6 +1,9 @@
 src/**
+dist/**
+!dist/extension.js
 !dist/webview/**
 *.tsbuildinfo
 tsconfig.json
-vite.config.ts
 tsconfig.webview.json
+vite.config.ts
+build.mjs

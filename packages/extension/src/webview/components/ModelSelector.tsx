@@ -1,7 +1,4 @@
-export interface ModelOption {
-  readonly id: string;
-  readonly provider: string;
-}
+import type { ModelOption } from '../init-models.js';
 
 export function ModelSelector({
   currentModelId,
