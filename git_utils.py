@@ -6,7 +6,30 @@ any project directory. Defaults to the current working directory.
 
 import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TypedDict
+
+
+class FetchResult(TypedDict):
+    success: bool
+    message: str
+
+
+class AheadBehind(TypedDict):
+    ahead: int
+    behind: int
+    remote_head: str | None
+
+
+class PullResult(TypedDict):
+    success: bool
+    message: str
+    before: str | None
+    after: str | None
+
+
+class CommitResult(TypedDict):
+    success: bool
+    message: str
 
 
 def _git_cmd(repo_path: Optional[str]) -> list[str]:
@@ -90,7 +113,7 @@ def get_default_branch(repo_path: Optional[str] = None) -> str:
         return "main"  # fallback
 
 
-def fetch_remote(repo_path: Optional[str] = None) -> dict:
+def fetch_remote(repo_path: Optional[str] = None) -> FetchResult:
     """Fetch latest refs from origin. Returns {"success": bool, "message": str}."""
     cmd = _git_cmd(repo_path) + ["fetch", "--quiet", "origin"]
     try:
@@ -129,7 +152,7 @@ def get_local_head(
 
 def get_ahead_behind(
     repo_path: Optional[str] = None, base: str = "HEAD", remote_ref: str | None = None
-) -> dict:
+) -> AheadBehind:
     """Return ahead/behind counts between local and remote refs.
 
     Returns {"ahead": int, "behind": int, "remote_head": str | None}.
@@ -173,7 +196,7 @@ def is_ancestor(
     return result.returncode == 0
 
 
-def pull_branch(repo_path: Optional[str] = None) -> dict:
+def pull_branch(repo_path: Optional[str] = None) -> PullResult:
     """Pull latest changes from the tracking branch.
 
     Returns {"success": bool, "message": str, "before": str | None, "after": str | None}.
@@ -215,7 +238,7 @@ def stage_all(repo_path: Optional[str] = None) -> None:
     subprocess.run(cmd, check=True, capture_output=True)
 
 
-def commit(message: str, repo_path: Optional[str] = None) -> dict:
+def commit(message: str, repo_path: Optional[str] = None) -> CommitResult:
     """Commit staged changes. Returns {"success": bool, "message": str}."""
     cmd = _git_cmd(repo_path) + ["commit", "-m", message]
     result = subprocess.run(cmd, capture_output=True, text=True)

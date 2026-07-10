@@ -2,7 +2,7 @@
 
 ## Build & Test
 
-- `uv run pytest -v` — Run full test suite (36 tests, ~2.4s)
+- `uv run pytest -v` — Run full test suite (44 tests, ~2.8s)
 - `uv run ruff check .` — Lint (zero warnings)
 - `uv run ruff format --check .` — Format check (auto-format with `ruff format .`)
 - `uv run python3 -m py_compile *.py tests/*.py` — Type/syntax check
@@ -19,7 +19,7 @@
 - `SOUL.md` — Bundled agent identity file; applied to profile via `setup`
 - `prompts/*.md` — Subagent system prompts (editable without touching Python)
 - `skills/jovaltus-agent/SKILL.md` — Agent Mode workflow definition
-- `tests/` — 36 pytest tests across 4 test files + conftest.py
+- `tests/` — 44 pytest tests across 5 test files + conftest.py
 
 ## Key Constraints
 
@@ -37,13 +37,22 @@
 - `docs/principles/` — Code conventions with source evidence
 - Every doc claim traces to source file + line range. `[INFERRED]` marks unverifiable claims.
 
-## CLI Commands (v0.2.0)
+## CLI Commands (v0.3.0)
 
-- `hermes jovaltus setup` — Create profile, apply SOUL.md (one-command install)
+- `hermes jovaltus setup` — Create profile, install bundled skills, apply SOUL.md
+  - Interactive prompts with TTY detection (falls back to safe defaults)
   - Creates `jovaltus-agent` profile if missing
-  - Writes `SOUL.md` to profile directory for coding agent identity
+  - Installs bundled skills to global skills directory
+  - Optionally writes `SOUL.md` to profile directory
+  - Persists installation state to `~/.hermes/jovaltus_state.json`
+- `hermes jovaltus status` — Show installation state per profile
+  - Displays profile name, installation mode, and last updated timestamp
 - `hermes jovaltus update --check` — Check for remote updates against origin
-- `hermes jovaltus update` — Pull latest changes (fast-forward only)
+- `hermes jovaltus update` — Pull latest changes
+  - Detects and removes stale bundled skills (interactive)
+  - Refreshes all bundled skills
+  - Re-applies SOUL.md where previously installed
+  - Refreshes timestamps
 
 ## Workflow
 

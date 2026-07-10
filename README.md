@@ -154,13 +154,27 @@ Subagent works in background:
 hermes plugins install LaiTszKin/jovaltus --enable
 ```
 
-### Step 2: 啟用 Plugin
+### Step 2: Setup
+
+```bash
+# 一鍵安裝 — 互動式 prompts (TTY detection, 非互動環境用預設值)
+hermes jovaltus setup
+```
+
+Setup 會：
+
+1. 建立 `jovaltus-agent` profile（如不存在）
+2. 安裝 bundled skills 到 global skills 目錄
+3. 寫入 SOUL.md（可選，預設 yes）
+4. 記錄安裝狀態至 `~/.hermes/jovaltus_state.json`
+
+### Step 3: 啟用 Plugin
 
 ```bash
 hermes plugins enable jovaltus
 ```
 
-### Step 3: 建立 Profile
+### Step 4: 建立 Profile
 
 ```bash
 # 一鍵建立 jovaltus-agent profile
@@ -205,6 +219,15 @@ hermes -p jovaltus-agent
 ### 日常使用
 
 ```bash
+# 查詢安裝狀態
+hermes jovaltus status
+
+# 檢查更新
+hermes jovaltus update --check
+
+# 套用更新（自動清理過時 skill、同步 SOUL.md）
+hermes jovaltus update
+
 # 在任何專案目錄下啟動
 cd /projects/app-alpha
 hermes -p jovaltus-agent

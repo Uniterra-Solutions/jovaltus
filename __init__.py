@@ -2,11 +2,22 @@
 
 Called by Hermes at startup. Creates handler closures that capture ctx,
 then registers them as tools. Also registers CLI commands and bundled skills.
+
+Extended in v0.3.0:
+- State management (~/.hermes/jovaltus_state.json) tracks installation state
+- Status command to query installation state
+- Profile sync on update (re-applies SOUL.md)
+- Stale skill detection and removal
+- Interactive prompts with TTY detection
 """
 
+import json
 import logging
 import os
+import shutil
 import subprocess
+import sys
+from datetime import datetime
 from pathlib import Path
 
 from . import schemas, git_utils
@@ -15,6 +26,10 @@ from .tools import make_implement_handler, make_verify_handler, make_simplify_ha
 logger = logging.getLogger(__name__)
 
 _PLUGIN_DIR = Path(__file__).parent
+_STATE_FILENAME = "jovaltus_state.json"
+
+
+# ── Path helpers ───────────────────────────────────────────────────
 
 
 def _get_global_hermes_home() -> Path:
@@ -34,29 +49,92 @@ def _get_global_hermes_home() -> Path:
     return Path.home() / ".hermes"
 
 
-# ── Profile & SOUL.md ──────────────────────────────────────────────
-
-
 def _get_profiles_dir() -> Path:
     """Return the global Hermes profiles directory."""
     return _get_global_hermes_home() / "profiles"
 
 
+def _get_state_path() -> Path:
+    """Return the path to the state file (~/.hermes/jovaltus_state.json)."""
+    return _get_global_hermes_home() / _STATE_FILENAME
+
+
+# ── State management ───────────────────────────────────────────────
+
+
+def _load_state() -> dict:
+    """Load installation state from JSON file."""
+    state_path = _get_state_path()
+    if state_path.exists():
+        try:
+            result = json.loads(state_path.read_text())
+            assert isinstance(result, dict)
+            return result
+        except (json.JSONDecodeError, OSError, AssertionError):
+            pass
+    return {"profiles": {}}
+
+
+def _save_state(state: dict) -> None:
+    """Save installation state to JSON file."""
+    state_path = _get_state_path()
+    try:
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n")
+    except OSError as e:
+        print(f"  ! Could not save state: {e}")
+
+
+def _set_profile_state(profile_name: str, soul_md: bool) -> None:
+    """Record that a profile has been set up with Jovaltus.
+
+    The presence of a profile in the state means skills have been installed.
+    The *soul_md* flag indicates whether SOUL.md was also deployed.
+    """
+    state = _load_state()
+    state["profiles"][profile_name] = {
+        "soul_md": soul_md,
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    _save_state(state)
+
+
+# ── Interactive prompts ────────────────────────────────────────────
+
+
+def _prompt_yes_no(prompt: str, default: bool = True) -> bool:
+    """Ask a yes/no question interactively.
+
+    Returns *default* when stdin is not a TTY (non-interactive).
+    """
+    if not sys.stdin.isatty():
+        return default
+    hint = "Y/n" if default else "y/N"
+    raw = input(f"{prompt} [{hint}] ").strip().lower()
+    if not raw:
+        return default
+    return raw in ("y", "yes")
+
+
+# ── Profile & SOUL.md ──────────────────────────────────────────────
+
+
 def _get_profile_dir(profile_name: str = "jovaltus-agent") -> Path:
-    """Return the profile directory for jovaltus-agent."""
-    return _get_profiles_dir() / profile_name
+    """Return the profile directory for a given profile name."""
+    profiles_dir = _get_profiles_dir()
+    return profiles_dir / profile_name
 
 
 def _ensure_profile(profile_name: str = "jovaltus-agent") -> bool:
-    """Create the jovaltus-agent profile if it doesn't exist.
+    """Create the profile if it doesn't exist.
 
     Returns True if the profile exists or was created.
     """
     profile_dir = _get_profile_dir(profile_name)
-    if profile_dir.exists():
+    if profile_dir.exists() and (profile_dir / "config.yaml").exists():
         return True
 
-    print(f"Creating profile '{profile_name}'...")
+    print(f"  Creating profile '{profile_name}'...")
     try:
         subprocess.run(
             ["hermes", "profile", "create", profile_name],
@@ -77,11 +155,7 @@ def _ensure_profile(profile_name: str = "jovaltus-agent") -> bool:
 
 
 def _apply_soul_md(profile_name: str = "jovaltus-agent") -> bool:
-    """Write SOUL.md to the profile directory.
-
-    The SOUL.md file sets the agent's identity as a coding agent,
-    making it take on the Jovaltus coding role automatically.
-    """
+    """Write SOUL.md from the plugin bundle into the profile directory."""
     profile_dir = _get_profile_dir(profile_name)
     soul_src = _PLUGIN_DIR / "SOUL.md"
     soul_dst = profile_dir / "SOUL.md"
@@ -99,49 +173,115 @@ def _apply_soul_md(profile_name: str = "jovaltus-agent") -> bool:
         return False
 
 
-def _install_bundled_skill(profile_name: str = "jovaltus-agent") -> bool:
-    """Copy the bundled skill to the global skills dir so it appears in hermes skills list.
+# ── Bundled skill management ───────────────────────────────────────
 
-    The skill is also registered via ctx.register_skill() for namespaced
-    access (skill_view("jovaltus:jovaltus-agent")). This copies it to the
-    global skills directory so it also appears in 'hermes skills list'.
-    Returns True if the skill was installed or already exists.
+
+def _is_skill_dir(path: Path) -> bool:
+    """Return True if *path* is a directory containing SKILL.md."""
+    return path.is_dir() and (path / "SKILL.md").exists()
+
+
+def _get_bundled_skill_names() -> set[str]:
+    """Return the set of skill names currently bundled in the plugin directory."""
+    skills_dir = _PLUGIN_DIR / "skills"
+    if not skills_dir.is_dir():
+        return set()
+    return {
+        child.name for child in sorted(skills_dir.iterdir()) if _is_skill_dir(child)
+    }
+
+
+def _remove_installed_skill(skill_name: str) -> bool:
+    """Remove an installed skill from the global skills directory.
+
+    Returns True if the skill was removed or didn't exist.
     """
-    skill_name = profile_name  # "jovaltus-agent"
-    skill_src = _PLUGIN_DIR / "skills" / skill_name / "SKILL.md"
-    skills_dir = _get_global_hermes_home() / "skills"
-    skill_dst = skills_dir / skill_name / "SKILL.md"
-
-    if not skill_src.exists():
-        print(f"  ! Bundled skill not found at {skill_src}")
-        return False
-
-    if skill_dst.exists():
-        # Check if content is the same; skip if already up to date
-        if skill_dst.read_text() == skill_src.read_text():
-            print(f"  ✓ Skill '{skill_name}' already installed and up to date")
-            return True
-
+    skill_dir = _get_global_hermes_home() / "skills" / skill_name
+    if not skill_dir.exists():
+        return True
     try:
-        skill_dst.parent.mkdir(parents=True, exist_ok=True)
-        skill_dst.write_text(skill_src.read_text())
-        print(f"  ✓ Skill '{skill_name}' installed to {skill_dst}")
-        print("    Available in: hermes skills list")
-        print(f"    Load via:     skill_view('{skill_name}')")
+        shutil.rmtree(skill_dir)
+        print(f"  🗑  Removed stale skill '{skill_name}' from global skills")
         return True
     except OSError as e:
-        print(f"  ! Could not install skill: {e}")
+        print(f"  ! Could not remove stale skill '{skill_name}': {e}")
         return False
+
+
+def _remove_stale_skills(after_skills: set[str]) -> None:
+    """Detect and remove skills that are no longer bundled.
+
+    Compares currently installed skills against the new set of bundled
+    skills. Any skill installed in ~/.hermes/skills/ that no longer
+    exists in the plugin is stale and gets removed.
+    """
+    global_dir = _get_global_hermes_home() / "skills"
+    if not global_dir.is_dir():
+        return
+
+    installed = {child.name for child in global_dir.iterdir() if _is_skill_dir(child)}
+    stale = installed - after_skills
+    if not stale:
+        print("  ✓ No stale skills to remove")
+        return
+
+    print()
+    print("  📋 Stale skills detected (removed from bundle):")
+    for name in sorted(stale):
+        print(f"    - {name}")
+
+    if _prompt_yes_no("  Remove stale skills?", default=True):
+        for name in sorted(stale):
+            _remove_installed_skill(name)
+    else:
+        print("  ⏭  Skipped stale skill removal")
+
+
+def _install_bundled_skills() -> bool:
+    """Copy bundled skills to the global skills dir for visibility.
+
+    Returns True if all skills were installed successfully.
+    """
+    skills_dir = _PLUGIN_DIR / "skills"
+    if not skills_dir.is_dir():
+        print("  ! No bundled skills directory found")
+        return False
+
+    all_ok = True
+    for child in sorted(skills_dir.iterdir()):
+        if not _is_skill_dir(child):
+            continue
+        skill_md = child / "SKILL.md"
+        skill_name = child.name
+        dst = _get_global_hermes_home() / "skills" / skill_name / "SKILL.md"
+
+        if dst.exists():
+            if dst.read_text() == skill_md.read_text():
+                print(f"  ✓ Skill '{skill_name}' already installed and up to date")
+                continue
+
+        try:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_text(skill_md.read_text())
+            print(f"  ✓ Skill '{skill_name}' installed to {dst}")
+            print(f"    Load via: skill_view('{skill_name}')")
+        except OSError as e:
+            print(f"  ! Could not install skill '{skill_name}': {e}")
+            all_ok = False
+
+    return all_ok
 
 
 # ── CLI handlers ───────────────────────────────────────────────────
 
 
-def _setup_command(args) -> None:
+def _setup_command(args) -> None:  # noqa: ARG001
     """Handler for 'hermes jovaltus setup'.
 
-    Creates the jovaltus-agent profile if it doesn't exist,
-    writes SOUL.md to set the coding agent role, and confirms readiness.
+    1. Create jovaltus-agent profile if missing.
+    2. Install bundled skills (global).
+    3. Optionally apply SOUL.md (interactive, default: yes).
+    4. Persist installation state.
     """
     print("⚡ Jovaltus Setup")
     print("━" * 40)
@@ -152,30 +292,68 @@ def _setup_command(args) -> None:
     if profile_ok:
         print(f"  ✓ Profile '{_get_profile_dir()}' ready")
 
-    # Step 2: SOUL.md
-    print("\n🧠 Agent Identity (SOUL.md)")
-    soul_ok = _apply_soul_md()
-    if soul_ok:
-        print("  ✓ Coding agent identity applied")
-        print("    The agent will automatically adopt the Jovaltus coding role.")
-
-    # Step 3: Bundled skill (for hermes skills list visibility)
-    print("\n📚 Bundled Skill")
-    skill_ok = _install_bundled_skill()
-    if skill_ok:
-        print("  ✓ Skill registered and installed")
-
-    # Step 4: Summary
-    print(f"\n{'━' * 40}")
-    if profile_ok and soul_ok:
-        print("✅ Jovaltus plugin v0.2.0 ready")
-        print("  Start a session:   hermes -p jovaltus-agent")
-        print("  Enable Jovaltus:   hermes tools enable jovaltus")
-        print("  Run setup again:   hermes jovaltus setup")
-        print("  Check for updates: hermes jovaltus update --check")
+    # Step 2: Bundled skills
+    print("\n📚 Bundled Skills")
+    with_skills = _prompt_yes_no("  Install bundled skills?", default=True)
+    if with_skills:
+        _install_bundled_skills()
     else:
-        print("⚠️  Jovaltus plugin v0.2.0 — setup incomplete")
-        print("  Run again: hermes jovaltus setup")
+        print("  ⏭  Skipped skill installation")
+
+    # Step 3: SOUL.md
+    print("\n🧠 Agent Identity (SOUL.md)")
+    profile_dir = _get_profile_dir()
+    soul_dst = profile_dir / "SOUL.md"
+    with_soul = _prompt_yes_no(
+        "  Apply SOUL.md with Jovaltus agent identity?", default=True
+    )
+    if with_soul and soul_dst.exists():
+        if not _prompt_yes_no("  Overwrite existing SOUL.md?", default=False):
+            print("  ⏭  Keeping existing SOUL.md")
+            with_soul = False
+    if with_soul:
+        _apply_soul_md()
+    else:
+        print("  ⏭  Skipped SOUL.md")
+
+    # Persist state
+    _set_profile_state("jovaltus-agent", soul_md=with_soul)
+
+    # Summary
+    print(f"\n{'━' * 40}")
+    print("✅ Jovaltus setup complete.")
+    print("  Start a session:   hermes -p jovaltus-agent")
+    print("  Enable Jovaltus:   hermes tools enable jovaltus")
+    print("  Check status:      hermes jovaltus status")
+    print("  Check for updates: hermes jovaltus update --check")
+
+
+def _status_command(args) -> None:  # noqa: ARG001
+    """Handler for 'hermes jovaltus status'.
+
+    Shows installation status for the jovaltus-agent profile.
+    """
+    print("📊 Jovaltus Installation Status")
+    print("━" * 40)
+
+    state = _load_state()
+    profiles_state = state.get("profiles", {})
+
+    if not profiles_state:
+        print("\n  Jovaltus has not been installed yet.")
+        print("  Run: hermes jovaltus setup")
+        return
+
+    print()
+    header = f"{'Profile':<22} {'Status':<24} {'Last Updated'}"
+    sep = f"{'─' * 22} {'─' * 24} {'─' * 20}"
+    print(f"  {header}")
+    print(f"  {sep}")
+    for name, info in sorted(profiles_state.items()):
+        status = "Skills + SOUL.md ✓" if info.get("soul_md") else "Skills only"
+        updated = info.get("updated_at", "—")
+        print(f"  {name:<22} {status:<24} {updated}")
+    print()
 
 
 def _update_check(args) -> None:
@@ -235,10 +413,57 @@ def _update_check(args) -> None:
         print("\n✅ Jovaltus is up to date.")
 
 
+def _sync_installed_profiles(context: str = "") -> None:
+    """Update skills and SOUL.md for all profiles in the installation state.
+
+    Called after pulling latest code to ensure profiles are in sync.
+    Skills are already expected to be updated globally; this function
+    re-applies SOUL.md where tracked and refreshes timestamps.
+    """
+    state = _load_state()
+    profiles_state = state.get("profiles", {})
+
+    if not profiles_state:
+        print("\n  No profiles in installation state.")
+        print("  Run: hermes jovaltus setup")
+        return
+
+    ctx = f" ({context})" if context else ""
+    print(f"\n{'─' * 40}")
+    print(f"🔄 Syncing profiles{ctx}")
+
+    ts = datetime.now().isoformat(timespec="seconds")
+
+    synced = 0
+    for profile_name, info in sorted(profiles_state.items()):
+        profile_dir = _get_profile_dir(profile_name)
+        if not profile_dir.exists() or not (profile_dir / "config.yaml").exists():
+            print(f"\n  ⏭  Profile '{profile_name}' no longer exists — skipping")
+            continue
+
+        print(f"\n📁 Profile: {profile_name}")
+
+        # SOUL.md
+        if info.get("soul_md"):
+            print("  🧠 Updating SOUL.md...")
+            _apply_soul_md(profile_name)
+        else:
+            print("  ✓ Skills only (SOUL.md not tracked)")
+
+        # Refresh timestamp in state
+        state["profiles"][profile_name]["updated_at"] = ts
+        synced += 1
+
+    _save_state(state)
+    print(f"\n  ✅ {synced} profile(s) synced")
+
+
 def _update_pull(args) -> None:
     """Handler for 'hermes jovaltus update'.
 
     Pulls the latest changes from the remote repository.
+    Detects and removes stale bundled skills.
+    Then updates each previously-installed profile according to its state.
     """
     project_dir = str(_PLUGIN_DIR.resolve())
 
@@ -286,23 +511,43 @@ def _update_pull(args) -> None:
 
     if behind == 0:
         print("   After:  already up to date")
-        print("\n✅ Jovaltus is already up to date.")
+        # Still refresh skills and SOUL in case state drifted
+        print("\n📚 Refreshing bundled skills...")
+        _install_bundled_skills()
+        _sync_installed_profiles("already up to date — refreshing")
+        print(f"\n{'━' * 40}")
+        print("✅ Jovaltus is up to date.")
         return
 
     # Pull
     print(f"   Pulling {behind} new commit(s)...")
     result = git_utils.pull_branch(project_dir)
 
-    if result["success"]:
-        after = result.get("after", "")
-        print(f"   After:  {after[:12] if after else 'unknown'}")
-        print("\n✅ Jovaltus updated successfully!")
-        print("   Restart any running Hermes sessions to see changes.")
-    else:
+    if not result["success"]:
         print(f"\n✗ Update failed: {result['message']}")
         print("  If the upstream force-pushed, reset with:")
         print("    git reset --hard origin/main")
         print("  (This discards local changes to Jovaltus.)")
+        return
+
+    after = result.get("after", "")
+    print(f"   After:  {after[:12] if after else 'unknown'}")
+
+    # Detect and remove stale skills
+    after_skills = _get_bundled_skill_names()
+    _remove_stale_skills(after_skills)
+
+    # Update remaining skills — always (global operation)
+    print("\n📚 Updating bundled skills...")
+    _install_bundled_skills()
+
+    # Sync profiles (update SOUL.md where tracked, refresh timestamps)
+    _sync_installed_profiles("updated")
+
+    print(f"\n{'━' * 40}")
+    print("✅ Jovaltus updated successfully!")
+    print("   Restart any running Hermes sessions to see changes.")
+    print("   Check status: hermes jovaltus status")
 
 
 def _jovaltus_command(args) -> None:
@@ -311,6 +556,8 @@ def _jovaltus_command(args) -> None:
 
     if sub == "setup" or sub is None:
         _setup_command(args)
+    elif sub == "status":
+        _status_command(args)
     elif sub == "update":
         if getattr(args, "check", False):
             _update_check(args)
@@ -318,19 +565,26 @@ def _jovaltus_command(args) -> None:
             _update_pull(args)
     else:
         print(f"Unknown command: {sub}")
-        print("Usage: hermes jovaltus <setup|update>")
+        print("Usage: hermes jovaltus <setup|status|update>")
 
 
 def _setup_argparse(subparser):
     """Build argparse subcommand tree for 'hermes jovaltus'."""
     subs = subparser.add_subparsers(dest="jovaltus_command")
 
-    # ── setup ──────────────────────────────────────────────────
+    # ── setup ──
     subs.add_parser(
-        "setup", help="Create jovaltus-agent profile, apply SOUL.md, and verify setup"
+        "setup",
+        help="Create jovaltus-agent profile, apply SOUL.md, install bundled skills",
     )
 
-    # ── update ─────────────────────────────────────────────────
+    # ── status ──
+    subs.add_parser(
+        "status",
+        help="Show Jovaltus installation status per profile",
+    )
+
+    # ── update ──
     update_parser = subs.add_parser(
         "update",
         help="Check for and apply Jovaltus plugin updates",
@@ -377,7 +631,7 @@ def register(ctx):
     # ── CLI commands ─────────────────────────────────────────────────
     ctx.register_cli_command(
         name="jovaltus",
-        help="Jovaltus plugin — setup, update, and management",
+        help="Jovaltus plugin — setup, status, update, and management",
         setup_fn=_setup_argparse,
         handler_fn=_jovaltus_command,
     )
