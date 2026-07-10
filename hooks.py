@@ -59,7 +59,7 @@ _STAGE_HINTS: dict[str, list[str]] = {
 }
 
 
-def _build_stage_banner(task: dict) -> str:
+def _build_stage_banner(task: dict[str, Any]) -> str:
     """Build the stage guidance banner injected into pre_llm_call."""
     tid = task.get("task_id", "?")
     stage = task.get("stage", "idle")
@@ -160,7 +160,7 @@ def on_pre_llm_call(
     session_id: str,
     user_message: str,
     **kwargs: Any,
-) -> dict | None:
+) -> dict[str, Any] | None:
     """PreLLMCall hook — inject stage guidance context.
 
     Fires before every LLM turn. If there's an active Jovaltus task,

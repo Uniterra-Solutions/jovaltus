@@ -19,6 +19,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from . import hooks, schemas, git_utils
 from .tools import make_implement_handler, make_verify_handler, make_simplify_handler
@@ -62,7 +63,7 @@ def _get_state_path() -> Path:
 # ── State management ───────────────────────────────────────────────
 
 
-def _load_state() -> dict:
+def _load_state() -> dict[str, Any]:
     """Load installation state from JSON file."""
     state_path = _get_state_path()
     if state_path.exists():
@@ -75,7 +76,7 @@ def _load_state() -> dict:
     return {"profiles": {}}
 
 
-def _save_state(state: dict) -> None:
+def _save_state(state: dict[str, Any]) -> None:
     """Save installation state to JSON file."""
     state_path = _get_state_path()
     try:
@@ -275,7 +276,7 @@ def _install_bundled_skills() -> bool:
 # ── CLI handlers ───────────────────────────────────────────────────
 
 
-def _setup_command(args) -> None:  # noqa: ARG001
+def _setup_command(args: Any) -> None:  # noqa: ARG001
     """Handler for 'hermes jovaltus setup'.
 
     1. Create jovaltus-agent profile if missing.
@@ -333,7 +334,7 @@ def _setup_command(args) -> None:  # noqa: ARG001
     print("  Check for updates: hermes jovaltus update --check")
 
 
-def _status_command(args) -> None:  # noqa: ARG001
+def _status_command(args: Any) -> None:  # noqa: ARG001
     """Handler for 'hermes jovaltus status'.
 
     Shows installation status for the jovaltus-agent profile.
@@ -361,7 +362,7 @@ def _status_command(args) -> None:  # noqa: ARG001
     print()
 
 
-def _update_check(args) -> None:
+def _update_check(args: Any) -> None:
     """Handler for 'hermes jovaltus update --check'.
 
     Compares the local repository HEAD against the remote origin/main
@@ -463,7 +464,7 @@ def _sync_installed_profiles(context: str = "") -> None:
     print(f"\n  ✅ {synced} profile(s) synced")
 
 
-def _update_pull(args) -> None:
+def _update_pull(args: Any) -> None:
     """Handler for 'hermes jovaltus update'.
 
     Pulls the latest changes from the remote repository.
@@ -620,7 +621,7 @@ def _print_jovaltus_help() -> None:
     print()
 
 
-def _jovaltus_command(args) -> None:
+def _jovaltus_command(args: Any) -> None:
     """Top-level dispatcher for 'hermes jovaltus <subcommand>'."""
     sub = getattr(args, "jovaltus_command", None)
     help_flag = getattr(args, "jovaltus_help", False)
@@ -643,7 +644,7 @@ def _jovaltus_command(args) -> None:
         _print_jovaltus_help()
 
 
-def _setup_argparse(subparser):
+def _setup_argparse(subparser: Any) -> None:
     """Build argparse subcommand tree for 'hermes jovaltus'."""
     # Remove argparse's default -h/--help so we can provide richer help output
     for action in list(subparser._actions):
@@ -692,7 +693,7 @@ def _setup_argparse(subparser):
 # ── Tool handler factories (called from register()) ──────────────
 
 
-def register(ctx):
+def register(ctx: Any) -> None:
     """Wire schemas to handler closures, register CLI commands and skills.
 
     Called exactly once at Hermes startup. Each tool handler is a closure

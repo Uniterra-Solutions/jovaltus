@@ -13,7 +13,9 @@ the Hermes plugin context (ctx). When the LLM calls the tool, the handler:
 
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from . import state, git_utils
 
@@ -38,7 +40,7 @@ def _resolve_dir(project_dir: str | None = None) -> str:
 
 
 def _spawn_review_subagent(
-    ctx,
+    ctx: Any,
     prompt: str,
     phase_label: str,
     section_title: str,
@@ -46,7 +48,7 @@ def _spawn_review_subagent(
     subagent_label: str,
     task_id: str,
     project_dir: str,
-    toolsets: list | None = None,
+    toolsets: list[str] | None = None,
 ) -> str:
     """Shared logic for verify/simplify handlers: look up task, diff, and spawn subagent.
 
@@ -122,11 +124,11 @@ def _spawn_review_subagent(
 # ── Factory functions (called from register()) ──────────────────────
 
 
-def make_implement_handler(ctx):
+def make_implement_handler(ctx: Any) -> Callable[..., str]:
     """Create jovaltus_implement handler with ctx closure."""
     prompt = _read_prompt("implement")
 
-    def handler(args: dict, **kwargs) -> str:
+    def handler(args: dict[str, Any], **kwargs: Any) -> str:
         project_dir = _resolve_dir(args.get("project_dir"))
 
         # Stage validation: don't start implement if another task is active
@@ -201,11 +203,11 @@ def make_implement_handler(ctx):
     return handler
 
 
-def make_verify_handler(ctx):
+def make_verify_handler(ctx: Any) -> Callable[..., str]:
     """Create jovaltus_verify handler with ctx closure."""
     prompt = _read_prompt("verify")
 
-    def handler(args: dict, **kwargs) -> str:
+    def handler(args: dict[str, Any], **kwargs: Any) -> str:
         task_id = args.get("task_id", "")
         project_dir = _resolve_dir(args.get("project_dir"))
 
@@ -251,11 +253,11 @@ def make_verify_handler(ctx):
     return handler
 
 
-def make_simplify_handler(ctx):
+def make_simplify_handler(ctx: Any) -> Callable[..., str]:
     """Create jovaltus_simplify handler with ctx closure."""
     prompt = _read_prompt("simplify")
 
-    def handler(args: dict, **kwargs) -> str:
+    def handler(args: dict[str, Any], **kwargs: Any) -> str:
         task_id = args.get("task_id", "")
         project_dir = _resolve_dir(args.get("project_dir"))
 

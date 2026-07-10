@@ -12,9 +12,9 @@ Stage machine tracks pipeline progress:
 
 import threading
 import time
-from typing import Optional
+from typing import Any, Optional, cast
 
-_tasks: dict[str, dict] = {}
+_tasks: dict[str, dict[str, Any]] = {}
 _lock = threading.Lock()
 _counter = 0
 
@@ -65,7 +65,7 @@ def get_stage(task_id: str) -> Optional[str]:
         task = _tasks.get(task_id)
         if task is None:
             return None
-        return task.get("stage", "idle")
+        return cast(Optional[str], task.get("stage", "idle"))
 
 
 def get_next_stage(task_id: str) -> Optional[str]:
@@ -93,7 +93,7 @@ def get_current_stage() -> Optional[str]:
         task = _tasks.get(tid)
         if task is None:
             return None
-        return task.get("stage", "idle")
+        return cast(Optional[str], task.get("stage", "idle"))
 
 
 # ── Active task tracking ───────────────────────────────────────────
@@ -112,7 +112,7 @@ def set_active_task(task_id: Optional[str]) -> None:
         _current_task_id = task_id
 
 
-def get_active_task() -> Optional[dict]:
+def get_active_task() -> Optional[dict[str, Any]]:
     """Get the currently active task record.
 
     Returns None if there is no active task or it no longer exists.
@@ -143,7 +143,7 @@ def create_task(project_dir: str, start_hash: str) -> str:
     return task_id
 
 
-def get_task(task_id: str) -> Optional[dict]:
+def get_task(task_id: str) -> Optional[dict[str, Any]]:
     """Look up a task by ID. Returns None if not found."""
     with _lock:
         return _tasks.get(task_id)

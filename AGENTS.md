@@ -2,11 +2,22 @@
 
 ## Build & Test
 
-- `uv run pytest -v` — Run full test suite (44 tests, ~2.8s)
+- `uv run pytest -v` — Run full test suite (60 tests, ~2.7s)
 - `uv run ruff check .` — Lint (zero warnings)
 - `uv run ruff format --check .` — Format check (auto-format with `ruff format .`)
-- `uv run python3 -m py_compile *.py tests/*.py` — Type/syntax check
-- All tests pass before commit. No lint warnings.
+- `uv run mypy --strict --no-site-packages *.py` — Type check (zero errors)
+- All tests pass before commit. No lint, format, or type warnings.
+
+## Pre-commit Hooks (v0.3.3)
+
+Three hooks run on every `git commit` in this order:
+
+1. **ruff check — lint** (must pass, blocks commit on failure)
+2. **mypy --strict — type check** (must pass, blocks commit on failure)
+3. **ruff format — auto-format** (reformats staged files after checks pass)
+
+Install: `pre-commit install` (already done)
+Run manually: `pre-commit run --all-files`
 
 ## Project Structure
 

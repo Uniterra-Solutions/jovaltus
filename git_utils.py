@@ -6,7 +6,7 @@ any project directory. Defaults to the current working directory.
 
 import subprocess
 from pathlib import Path
-from typing import Optional, TypedDict
+from typing import Any, Optional, TypedDict
 
 
 class FetchResult(TypedDict):
@@ -67,7 +67,7 @@ def get_diff(
 
 def get_diff_stat(
     start_hash: str, end: str = "HEAD", repo_path: Optional[str] = None
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Return a list of changed files with stats.
 
     Each entry: {"path": str, "additions": int, "deletions": int}

@@ -1,0 +1,41 @@
+# Pre-commit hooks for Jovaltus
+# Order: ruff lint → mypy strict → ruff format
+#
+# ruff check   — lint verification (must pass)
+# mypy --strict — type checking (must pass)
+# ruff format  — auto-format (runs after all checks pass)
+#
+# Install: pre-commit install
+# Run all: pre-commit run --all-files
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.21
+    hooks:
+      # ── Stage 1: Lint check (must pass) ──────────────────────────
+      - id: ruff
+        name: ruff check (lint)
+        args: [--fix]
+        types_or: [python, pyi]
+        description: "ruff check — lint validation (commit blocked on failure)"
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.16.1
+    hooks:
+      # ── Stage 2: Type check (must pass) ──────────────────────────
+      - id: mypy
+        name: mypy strict check
+        args: [--strict, --no-site-packages]
+        exclude: ^tests/
+        types_or: [python, pyi]
+        additional_dependencies: []
+        description: "mypy --strict — type checking (commit blocked on failure)"
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.21
+    hooks:
+      # ── Stage 3: Auto-format (runs after all checks pass) ────────
+      - id: ruff-format
+        name: ruff format (auto-format)
+        types_or: [python, pyi]
+        description: "ruff format — auto-format staged files"
