@@ -3,8 +3,13 @@
 Each schema describes the tool name, when the model should call it,
 and what arguments it expects.
 
-All three tools now spawn subagents automatically via delegate_task.
-The main agent only needs to call the tool — no manual delegate_task needed.
+All three tools validate the pipeline stage before spawning subagents:
+- jovaltus_implement: requires no active task (or stage idle/done)
+- jovaltus_verify: requires stage "implement"
+- jovaltus_simplify: requires stage "verify"
+
+Hooks inject stage guidance before each LLM turn so the agent
+always knows where it is in the pipeline.
 """
 
 IMPLEMENT_SCHEMA = {
@@ -14,6 +19,8 @@ IMPLEMENT_SCHEMA = {
         "writes code to satisfy the user's requirements. "
         "The subagent auto-commits when done. "
         "\n\n"
+        "Stage validation: requires no active pipeline task "
+        "(or current stage is idle/done). "
         "Call this AFTER the user has confirmed the requirements (Phase 0). "
         "The subagent has terminal and file access. "
         "It will report BLOCKED if genuinely stuck."
@@ -40,6 +47,7 @@ VERIFY_SCHEMA = {
         "fixes them, and repeats until all checks pass. "
         "The subagent has write access and auto-commits when done. "
         "\n\n"
+        'Stage validation: requires stage "implement". '
         "Call this AFTER the implement subagent has finished. "
         "Pass the task_id from jovaltus_implement's response."
     ),
@@ -71,6 +79,7 @@ SIMPLIFY_SCHEMA = {
         "> improve naming. "
         "Every deletion requires grep evidence. Auto-commits when done. "
         "\n\n"
+        'Stage validation: requires stage "verify". '
         "Call this AFTER the verification subagent has finished. "
         "Pass the task_id from jovaltus_implement's response."
     ),

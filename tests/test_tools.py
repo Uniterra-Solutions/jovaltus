@@ -34,6 +34,21 @@ def test_implement_not_git_dir(ctx: MagicMock):
     assert "git" in result["error"].lower()
 
 
+def test_implement_rejects_when_active_task(ctx: MagicMock, git_repo: Path):
+    """Implement should fail if another task is already active."""
+    from jovaltus import state
+
+    tid = state.create_task(str(git_repo), "abc")
+    state.set_active_task(tid)
+    state.set_stage(tid, "implement")
+
+    handler = make_implement_handler(ctx)
+    result = json.loads(handler({"project_dir": str(git_repo)}))
+    assert "error" in result
+    assert "implement" in result["error"].lower()
+    assert "active_task" in result
+
+
 def test_implement_success(ctx: MagicMock, git_repo: Path):
     """Happy path: creates task and dispatches subagent."""
     handler = make_implement_handler(ctx)
@@ -60,6 +75,24 @@ def test_verify_no_task_id(ctx: MagicMock):
     handler = make_verify_handler(ctx)
     result = json.loads(handler({"task_id": "nonexistent"}))
     assert "error" in result
+    # Stage validation should report task not found
+    assert "not found" in result["error"].lower()
+
+
+def test_verify_rejects_wrong_stage(ctx: MagicMock, git_repo: Path):
+    """Verify should fail if the task is not in 'implement' stage."""
+    # Create a task but don't set stage to implement
+    from jovaltus import state
+
+    tid = state.create_task(str(git_repo), "abc")
+    state.set_active_task(tid)
+    # Stage is still "idle"
+
+    handler = make_verify_handler(ctx)
+    result = json.loads(handler({"task_id": tid, "project_dir": str(git_repo)}))
+    assert "error" in result
+    assert "verify" in result["error"].lower()
+    assert "idle" in result.get("current_stage", "")
 
 
 def test_verify_success(ctx: MagicMock, git_repo: Path):
@@ -69,6 +102,7 @@ def test_verify_success(ctx: MagicMock, git_repo: Path):
     ctx.reset_mock()
     impl_result = json.loads(impl_handler({"project_dir": str(git_repo)}))
     task_id = impl_result["task_id"]
+    # Stage is now "implement" (set by implement handler)
 
     # Make a change so there's something to diff
     (git_repo / "file.py").write_text("x = 1")
@@ -104,12 +138,33 @@ def test_simplify_no_task_id(ctx: MagicMock):
     assert "error" in result
 
 
-def test_simplify_success(ctx: MagicMock, git_repo: Path):
-    """Simplify handler should compute clean diff and dispatch."""
+def test_simplify_rejects_wrong_stage(ctx: MagicMock, git_repo: Path):
+    """Simplify should fail if the task is not in 'verify' stage."""
+
+    # Create task in implement stage (via implement handler)
     impl_handler = make_implement_handler(ctx)
     ctx.reset_mock()
     impl_result = json.loads(impl_handler({"project_dir": str(git_repo)}))
     task_id = impl_result["task_id"]
+    # Stage is "implement"
+
+    handler = make_simplify_handler(ctx)
+    result = json.loads(handler({"task_id": task_id, "project_dir": str(git_repo)}))
+    assert "error" in result
+    assert "simplify" in result["error"].lower()
+    assert "implement" in result.get("current_stage", "")
+
+
+def test_simplify_success(ctx: MagicMock, git_repo: Path):
+    """Simplify handler should compute clean diff and dispatch."""
+    from jovaltus import state
+
+    impl_handler = make_implement_handler(ctx)
+    ctx.reset_mock()
+    impl_result = json.loads(impl_handler({"project_dir": str(git_repo)}))
+    task_id = impl_result["task_id"]
+    # Set stage to "verify" so simplify can proceed
+    state.set_stage(task_id, "verify")
 
     (git_repo / "app.py").write_text("print(1)\n")
     subprocess.run(

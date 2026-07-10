@@ -20,7 +20,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from . import schemas, git_utils
+from . import hooks, schemas, git_utils
 from .tools import make_implement_handler, make_verify_handler, make_simplify_handler
 
 logger = logging.getLogger(__name__)
@@ -632,6 +632,10 @@ def register(ctx):
         schema=schemas.SIMPLIFY_SCHEMA,
         handler=make_simplify_handler(ctx),
     )
+
+    # ── Hooks (stage tracking & guidance) ────────────────────────────
+    ctx.register_hook("post_tool_call", hooks.on_post_tool_call)
+    ctx.register_hook("pre_llm_call", hooks.on_pre_llm_call)
 
     # ── CLI commands ─────────────────────────────────────────────────
     ctx.register_cli_command(

@@ -1,13 +1,14 @@
-"""Tool handlers — factory functions that capture ctx and spawn subagents.
+"""Tool handlers - factory functions that capture ctx and spawn subagents.
 
 Each handler is created by a factory function in register() that captures
 the Hermes plugin context (ctx). When the LLM calls the tool, the handler:
 
-1. Records state (git hash, task_id)
-2. Reads the appropriate system prompt from prompts/*.md
-3. Spawns a subagent via ctx.dispatch_tool("delegate_task", ...)
+1. Validates the current pipeline stage (Layer 3)
+2. Records state (git hash, task_id)
+3. Reads the appropriate system prompt from prompts/*.md
+4. Spawns a subagent via ctx.dispatch_tool("delegate_task", ...)
    with the prompt as the goal
-4. Returns immediately (subagent runs in background)
+5. Returns immediately (subagent runs in background)
 """
 
 import json
@@ -120,6 +121,26 @@ def make_implement_handler(ctx):
     def handler(args: dict, **kwargs) -> str:
         project_dir = _resolve_dir(args.get("project_dir"))
 
+        # Stage validation: don't start implement if another task is active
+        active = state.get_active_task()
+        if active is not None:
+            active_stage = active.get("stage", "idle")
+            if active_stage not in ("idle", "done"):
+                return json.dumps(
+                    {
+                        "error": (
+                            f"Cannot start IMPLEMENT: task '{active['task_id']}' "
+                            f"is in stage '{active_stage}'."
+                        ),
+                        "active_task": active["task_id"],
+                        "current_stage": active_stage,
+                        "hint": (
+                            f'Continue with jovaltus_verify(task_id="{active["task_id"]}") '
+                            f"or reset the task first."
+                        ),
+                    }
+                )
+
         if not git_utils.is_git_repo(project_dir):
             return json.dumps(
                 {
@@ -131,6 +152,8 @@ def make_implement_handler(ctx):
         try:
             start_hash = git_utils.get_head_hash(project_dir)
             task_id = state.create_task(project_dir, start_hash)
+            state.set_stage(task_id, "implement")
+            state.set_active_task(task_id)
 
             logger.info(
                 "jovaltus_implement: spawning implement subagent "
@@ -177,6 +200,34 @@ def make_verify_handler(ctx):
     def handler(args: dict, **kwargs) -> str:
         task_id = args.get("task_id", "")
         project_dir = _resolve_dir(args.get("project_dir"))
+
+        # Stage validation: must be in "implement" stage
+        task = state.get_task(task_id)
+        if task is None:
+            return json.dumps(
+                {
+                    "error": f"Task '{task_id}' not found.",
+                    "hint": "Did you call jovaltus_implement first?",
+                }
+            )
+        current_stage = task.get("stage", "idle")
+        if current_stage != "implement":
+            return json.dumps(
+                {
+                    "error": (
+                        f"Cannot start VERIFY: task '{task_id}' "
+                        f"is in stage '{current_stage}', not 'implement'."
+                    ),
+                    "task_id": task_id,
+                    "current_stage": current_stage,
+                    "expected_stage": "implement",
+                }
+            )
+        if not state.set_stage(task_id, "verify"):
+            return json.dumps(
+                {"error": f"Stage transition {current_stage} \u2192 verify rejected."}
+            )
+
         return _spawn_review_subagent(
             ctx,
             prompt,
@@ -198,6 +249,34 @@ def make_simplify_handler(ctx):
     def handler(args: dict, **kwargs) -> str:
         task_id = args.get("task_id", "")
         project_dir = _resolve_dir(args.get("project_dir"))
+
+        # Stage validation: must be in "verify" stage
+        task = state.get_task(task_id)
+        if task is None:
+            return json.dumps(
+                {
+                    "error": f"Task '{task_id}' not found.",
+                    "hint": "Did you call jovaltus_implement first?",
+                }
+            )
+        current_stage = task.get("stage", "idle")
+        if current_stage != "verify":
+            return json.dumps(
+                {
+                    "error": (
+                        f"Cannot start SIMPLIFY: task '{task_id}' "
+                        f"is in stage '{current_stage}', not 'verify'."
+                    ),
+                    "task_id": task_id,
+                    "current_stage": current_stage,
+                    "expected_stage": "verify",
+                }
+            )
+        if not state.set_stage(task_id, "simplify"):
+            return json.dumps(
+                {"error": f"Stage transition {current_stage} \u2192 simplify rejected."}
+            )
+
         return _spawn_review_subagent(
             ctx,
             prompt,

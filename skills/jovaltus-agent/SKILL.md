@@ -17,6 +17,17 @@ This skill defines the four-phase pipeline for automated development work.
 The main agent (you) orchestrates by calling one tool per phase.
 Each tool spawns a subagent with the right system prompt and permissions.
 
+**✨ New: Stage-Guided Pipeline**
+Jovaltus now includes hooks that inject stage guidance before each LLM turn:
+- **`pre_llm_call` hook** — before each turn, injects a banner showing
+  current stage, pipeline progress, and what to do next
+- **`post_tool_call` hook** — tracks stage transitions and active task
+- **Stage validation** — each tool checks you're in the correct stage
+  before spawning a subagent
+
+This follows the "soft enforcement / adaptive nudge" pattern:
+the agent always knows its stage, but is never forced.
+
 ## Phase 0: Planning (You — the main agent)
 
 **Do not start implementing until the user confirms the plan.**
@@ -35,14 +46,41 @@ Each tool spawns a subagent with the right system prompt and permissions.
 
 ## Phase 1: Implement
 
-1. **Call `jovaltus_implement`** — Pass `project_dir` if not the cwd.
-   This spawns an implement subagent that writes the code.
-   The subagent auto-commits when done.
+**Stage constraint:** No active task required (stage must be idle/done).
 
-2. **Wait for the subagent result** — It arrives as a message.
-   Review the summary of what was changed.
+### Path A — Subagent (default): Call `jovaltus_implement`
+
+Pass `project_dir` if not the cwd. Spawns an implement subagent that writes
+the code and auto-commits. Wait for the result and review the summary.
+
+**Use Path A when:**
+- The change spans multiple files with complex interdependencies
+- You lack deep context — a subagent needs to explore the codebase
+- The task involves significant reasoning (algorithm design, data model
+  changes, refactoring with side effects)
+- You want an independent checkpoint commit from a focused worker
+
+### Path B — Direct: implement yourself
+
+Write the code directly without spawning a subagent.
+
+**Use Path B when all of these hold:**
+- The change is **well-scoped and self-contained** (single file, clear
+  before/after shape, no hidden ripple effects)
+- You already have full context — you've read all relevant files and
+  understand the architecture well enough that a subagent would need to
+  re-discover everything you already hold
+- The task is **mechanical** rather than reasoning-heavy (add a CLI command
+  that follows an existing pattern, rename, format migration)
+
+When implementing directly, still follow the Verification Checklist below
+(run tests, lint, type-check, review for edge cases) before claiming
+completion. No commit is required until Phase 2 is satisfied.
 
 ## Phase 2: Verify & Fix
+
+**Stage constraint:** Requires stage "implement". Call `jovaltus_verify`
+with the `task_id` from Phase 1.
 
 1. **Call `jovaltus_verify`** — Pass the `task_id` from Phase 1.
    This computes the diff, spawns a verification subagent with write access
@@ -51,6 +89,9 @@ Each tool spawns a subagent with the right system prompt and permissions.
 2. **Wait for the subagent result** — Note what issues were found and fixed.
 
 ## Phase 3: Simplify
+
+**Stage constraint:** Requires stage "verify". Call `jovaltus_simplify`
+with the `task_id` from Phase 1.
 
 1. **Call `jovaltus_simplify`** — Pass the `task_id` from Phase 1.
    This computes the clean diff, spawns a simplifier subagent that applies
