@@ -63,12 +63,13 @@ def _build_stage_banner(task: dict) -> str:
 
     # Build pipeline progress bar
     bar_parts: list[str] = []
-    for s in state.STAGE_ORDER:
+    stage_index = state.STAGE_ORDER.index(stage)
+    for idx, s in enumerate(state.STAGE_ORDER):
         if s == "idle":
             continue
         if s == stage:
             bar_parts.append(f"**{s}** ← active")
-        elif state.STAGE_ORDER.index(s) < state.STAGE_ORDER.index(stage):
+        elif idx < stage_index:
             bar_parts.append(f"~~{s}~~ ✓")
         else:
             bar_parts.append(s)
@@ -123,15 +124,13 @@ def on_post_tool_call(
         return
 
     phase = data.get("phase", "")
-    stage_map: dict[str, str] = {
+    # tool_name is always one of the three (guarded above); fallback to phase
+    _stage_of_tool = {
         "jovaltus_implement": "implement",
-        "implement": "implement",
         "jovaltus_verify": "verify",
-        "verify": "verify",
         "jovaltus_simplify": "simplify",
-        "simplify": "simplify",
     }
-    target_stage = stage_map.get(tool_name) or stage_map.get(phase, "")
+    target_stage = _stage_of_tool.get(tool_name, phase)
 
     if target_stage:
         ok = state.set_stage(pipeline_task_id, target_stage)
