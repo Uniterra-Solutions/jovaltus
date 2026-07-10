@@ -9,14 +9,10 @@ from pathlib import Path
 from typing import Optional
 
 
-def _resolve_path(repo_path: Optional[str] = None) -> str:
-    """Resolve the repo path, defaulting to cwd."""
-    return str(Path(repo_path or ".").resolve())
-
-
 def _git_cmd(repo_path: Optional[str]) -> list[str]:
     """Build git -C <path> prefix when repo_path is given."""
-    return ["git", "-C", _resolve_path(repo_path)]
+    resolved = str(Path(repo_path or ".").resolve())
+    return ["git", "-C", resolved]
 
 
 def is_git_repo(repo_path: Optional[str] = None) -> bool:

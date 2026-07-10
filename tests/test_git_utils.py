@@ -11,30 +11,6 @@ import pytest
 from jovaltus import git_utils
 
 
-@pytest.fixture
-def git_repo(tmp_path: Path) -> Path:
-    """Create a temporary git repo with an initial commit."""
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@test.com"],
-        cwd=repo, check=True, capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Test"],
-        cwd=repo, check=True, capture_output=True,
-    )
-    # Create an initial commit so HEAD is valid
-    (repo / "README.md").write_text("# Test")
-    subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "-m", "initial"],
-        cwd=repo, check=True, capture_output=True,
-    )
-    return repo
-
-
 def test_is_git_repo_true(git_repo: Path):
     assert git_utils.is_git_repo(str(git_repo)) is True
 

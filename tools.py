@@ -59,7 +59,7 @@ def make_implement_handler(ctx):
             logger.info("jovaltus_implement: spawning implement subagent "
                         "task=%s hash=%s dir=%s", task_id, start_hash, project_dir)
 
-            subagent_result = ctx.dispatch_tool("delegate_task", {
+            ctx.dispatch_tool("delegate_task", {
                 "goal": prompt,
                 "context": (
                     f"## Project Context\n\n"
@@ -106,7 +106,7 @@ def make_verify_handler(ctx):
             logger.info("jovaltus_verify: spawning verify subagent "
                         "task=%s files=%d", task_id, len(files))
 
-            subagent_result = ctx.dispatch_tool("delegate_task", {
+            ctx.dispatch_tool("delegate_task", {
                 "goal": prompt,
                 "context": (
                     f"## Verification Context\n\n"
@@ -160,7 +160,7 @@ def make_simplify_handler(ctx):
             logger.info("jovaltus_simplify: spawning simplifier subagent "
                         "task=%s files=%d", task_id, len(files))
 
-            subagent_result = ctx.dispatch_tool("delegate_task", {
+            ctx.dispatch_tool("delegate_task", {
                 "goal": prompt,
                 "context": (
                     f"## Simplification Context\n\n"
