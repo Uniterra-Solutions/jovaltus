@@ -276,45 +276,45 @@ def _install_bundled_skills() -> bool:
 
 
 def _link_plugin_to_profile() -> bool:
-    """Symlink the installed plugin from global plugins dir into the profile.
+    """Ensure the jovaltus plugin is accessible inside the jovaltus-agent profile.
 
-    Hermes loads plugins from the active profile's plugins/ directory when
-    starting a session (hermes -p jovaltus-agent).  This function creates
-    the symlink so the jovaltus plugin is available inside the profile.
+    When installed via `hermes plugins install LaiTszKin/jovaltus`, Hermes may
+    place the plugin in either the global plugins dir (~/.hermes/plugins/) or
+    directly in the profile's plugins dir.  This function handles both cases:
 
-    Returns True if the link exists or was created.
+    1. If already in the profile's plugins dir → report OK.
+    2. If in global plugins dir → symlink into profile.
+    3. If nowhere → report error.
+
+    Returns True if the plugin is accessible from the profile.
     """
-    global_plugins = _get_global_hermes_home() / "plugins"
-    plugin_src = global_plugins / "jovaltus"
-
-    if not plugin_src.exists():
-        print("  ! Plugin not found in global plugins directory.")
-        print("    Install it first: hermes plugins install LaiTszKin/jovaltus")
-        return False
-
     profile_plugins = _get_profile_dir() / "plugins"
-    plugin_dst = profile_plugins / "jovaltus"
+    profile_plugin = profile_plugins / "jovaltus"
 
-    if plugin_dst.exists() or plugin_dst.is_symlink():
-        current = str(plugin_dst.resolve())
-        expected = str(plugin_src.resolve())
-        if current == expected:
-            print("  ✓ Plugin already linked to profile")
-            return True
-        # Pointing elsewhere — remove and re-link
-        try:
-            plugin_dst.unlink()
-        except OSError:
-            shutil.rmtree(plugin_dst, ignore_errors=True)
-
-    try:
-        profile_plugins.mkdir(parents=True, exist_ok=True)
-        plugin_dst.symlink_to(plugin_src, target_is_directory=True)
-        print(f"  ✓ Plugin linked to profile: {plugin_dst}")
+    # Case 1: Already inside the profile — nothing to do
+    if profile_plugin.exists() or profile_plugin.is_symlink():
+        print("  ✓ Plugin already available in profile")
         return True
-    except OSError as e:
-        print(f"  ! Could not link plugin to profile: {e}")
-        return False
+
+    # Case 2: Found in global plugins dir — link into profile
+    global_plugins = _get_global_hermes_home() / "plugins"
+    global_plugin = global_plugins / "jovaltus"
+
+    if global_plugin.exists():
+        try:
+            profile_plugins.mkdir(parents=True, exist_ok=True)
+            profile_plugin.symlink_to(global_plugin, target_is_directory=True)
+            print(f"  ✓ Plugin linked to profile: {profile_plugin}")
+            return True
+        except OSError as e:
+            print(f"  ! Could not link plugin to profile: {e}")
+            return False
+
+    # Case 3: Not found anywhere
+    print("  ! Plugin not found in global or profile plugins directories.")
+    print("    Install it first: hermes plugins install LaiTszKin/jovaltus")
+    print("    (Run the install from outside the jovaltus repo)")
+    return False
 
 
 # ── CLI handlers ───────────────────────────────────────────────────

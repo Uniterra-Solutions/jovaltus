@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.3.1 — 2026-07-11
+
+### Added
+
+- **Auto-link plugin to profile on `setup`** (`_link_plugin_to_profile()`) — detects the installed plugin in either global `~/.hermes/plugins/` or profile plugins dir and ensures it's accessible from `jovaltus-agent` profile
+- **Better error message on `setup`** — suggests installing from outside the repo if plugin isn't found
+
+---
+
 ## v0.3.0 — 2026-07-11
 
 ### Added
