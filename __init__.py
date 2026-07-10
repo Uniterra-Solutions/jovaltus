@@ -555,11 +555,81 @@ def _update_pull(args) -> None:
     print("   Check status: hermes jovaltus status")
 
 
+def _print_jovaltus_help() -> None:
+    """Print comprehensive help for all 'hermes jovaltus' subcommands."""
+    print("╔══════════════════════════════════════════════════════════════╗")
+    print("║                     Jovaltus — CLI Help                      ║")
+    print("╚══════════════════════════════════════════════════════════════╝")
+    print()
+    print("Usage:  hermes jovaltus <command> [options]")
+    print()
+    print("Available commands:")
+    print()
+
+    # ── setup ──
+    print("  setup")
+    print("    Create and configure the jovaltus-agent profile for first use.")
+    print()
+    print("    Steps:")
+    print("      1. Creates the jovaltus-agent profile if it doesn't exist")
+    print("      2. Installs bundled skills (jovaltus-agent) to global skills dir")
+    print("      3. Optionally applies the Jovaltus agent identity (SOUL.md)")
+    print("      4. Persists installation state to ~/.hermes/jovaltus_state.json")
+    print()
+    print("    Example:")
+    print("      hermes jovaltus setup")
+    print()
+
+    # ── status ──
+    print("  status")
+    print("    Show the Jovaltus installation status across profiles.")
+    print()
+    print("    Displays:")
+    print("      - Profile name")
+    print("      - Installation mode (skills only / Skills + SOUL.md)")
+    print("      - Last updated timestamp")
+    print()
+    print("    Example:")
+    print("      hermes jovaltus status")
+    print()
+
+    # ── update (--check) ──
+    print("  update --check")
+    print("    Check whether a newer version of Jovaltus is available.")
+    print()
+    print("    Compares local HEAD against remote origin/main and reports")
+    print("    the number of new commits behind (or ahead).")
+    print()
+    print("    Example:")
+    print("      hermes jovaltus update --check")
+    print()
+
+    # ── update ──
+    print("  update")
+    print("    Pull the latest Jovaltus changes and sync installed profiles.")
+    print()
+    print("    Steps:")
+    print("      1. Fetches remote refs and checks for new commits")
+    print("      2. Pulls the latest changes from remote origin/main")
+    print("      3. Detects and interactively removes stale bundled skills")
+    print("      4. Refreshes all bundled skills in the global skills directory")
+    print("      5. Re-applies SOUL.md and refreshes timestamps for all profiles")
+    print()
+    print("    Example:")
+    print("      hermes jovaltus update")
+    print()
+
+
 def _jovaltus_command(args) -> None:
     """Top-level dispatcher for 'hermes jovaltus <subcommand>'."""
     sub = getattr(args, "jovaltus_command", None)
+    help_flag = getattr(args, "jovaltus_help", False)
 
-    if sub == "setup" or sub is None:
+    if help_flag or sub is None:
+        _print_jovaltus_help()
+        return
+
+    if sub == "setup":
         _setup_command(args)
     elif sub == "status":
         _status_command(args)
@@ -570,11 +640,26 @@ def _jovaltus_command(args) -> None:
             _update_pull(args)
     else:
         print(f"Unknown command: {sub}")
-        print("Usage: hermes jovaltus <setup|status|update>")
+        _print_jovaltus_help()
 
 
 def _setup_argparse(subparser):
     """Build argparse subcommand tree for 'hermes jovaltus'."""
+    # Remove argparse's default -h/--help so we can provide richer help output
+    for action in list(subparser._actions):
+        opts = getattr(action, "option_strings", [])
+        if "-h" in opts or "--help" in opts:
+            subparser._remove_action(action)
+            break
+
+    # Add our own -h/--help flag
+    subparser.add_argument(
+        "-h", "--help",
+        action="store_true",
+        dest="jovaltus_help",
+        help="Show this comprehensive help message and exit",
+    )
+
     subs = subparser.add_subparsers(dest="jovaltus_command")
 
     # ── setup ──
