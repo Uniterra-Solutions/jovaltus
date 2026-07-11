@@ -335,9 +335,7 @@ def make_verify_handler(ctx: Any) -> Callable[..., str]:
 
         # ── Commit mode (stateless) ──────────────────────────────
         if before:
-            effective_before, effective_after = _resolve_commit_range(
-                before, after or None
-            )
+            effective_before, effective_after = _resolve_commit_range(before, after)
             return _spawn_commit_review_subagent(
                 ctx,
                 prompt,
@@ -427,9 +425,7 @@ def make_simplify_handler(ctx: Any) -> Callable[..., str]:
 
         # ── Commit mode (stateless) ──────────────────────────────
         if before:
-            effective_before, effective_after = _resolve_commit_range(
-                before, after or None
-            )
+            effective_before, effective_after = _resolve_commit_range(before, after)
             return _spawn_commit_review_subagent(
                 ctx,
                 prompt,

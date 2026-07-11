@@ -18,6 +18,25 @@ from jovaltus.tools import (
 )
 
 
+def _make_commit(repo: Path, filename: str, content: str = "x = 1") -> None:
+    """Create a file and commit it to the repo."""
+    (repo / filename).write_text(content)
+    subprocess.run(["git", "add", filename], cwd=repo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", f"add {filename}"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
+
+
+def _get_hash(repo: Path, ref: str = "HEAD") -> str:
+    """Get commit hash for a git ref."""
+    return subprocess.check_output(
+        ["git", "rev-parse", ref], cwd=repo, text=True
+    ).strip()
+
+
 @pytest.fixture
 def ctx() -> MagicMock:
     return MagicMock()
@@ -140,16 +159,7 @@ def test_verify_success(ctx: MagicMock, git_repo: Path):
     # Stage is now "implement" (set by implement handler)
 
     # Make a change so there's something to diff
-    (git_repo / "file.py").write_text("x = 1")
-    subprocess.run(
-        ["git", "add", "file.py"], cwd=git_repo, check=True, capture_output=True
-    )
-    subprocess.run(
-        ["git", "commit", "-m", "add file"],
-        cwd=git_repo,
-        check=True,
-        capture_output=True,
-    )
+    _make_commit(git_repo, "file.py")
 
     ctx.reset_mock()
     verify_handler = make_verify_handler(ctx)
@@ -194,19 +204,8 @@ def test_verify_commit_mode_both_task_id_and_before(ctx: MagicMock, git_repo: Pa
 def test_verify_commit_mode_before_only(ctx: MagicMock, git_repo: Path):
     """Verify with only 'before' should diff before..HEAD and dispatch."""
     # Make a commit so we have a reference point
-    (git_repo / "file.py").write_text("x = 1")
-    subprocess.run(
-        ["git", "add", "file.py"], cwd=git_repo, check=True, capture_output=True
-    )
-    subprocess.run(
-        ["git", "commit", "-m", "add file"],
-        cwd=git_repo,
-        check=True,
-        capture_output=True,
-    )
-    before = subprocess.check_output(
-        ["git", "rev-parse", "HEAD~1"], cwd=git_repo, text=True
-    ).strip()
+    _make_commit(git_repo, "file.py")
+    before = _get_hash(git_repo, "HEAD~1")
 
     ctx.reset_mock()
     handler = make_verify_handler(ctx)
@@ -228,33 +227,10 @@ def test_verify_commit_mode_before_only(ctx: MagicMock, git_repo: Path):
 
 def test_verify_commit_mode_before_after(ctx: MagicMock, git_repo: Path):
     """Verify with before+after should diff the exact range."""
-    (git_repo / "a.py").write_text("a = 1")
-    subprocess.run(
-        ["git", "add", "a.py"], cwd=git_repo, check=True, capture_output=True
-    )
-    subprocess.run(
-        ["git", "commit", "-m", "add a"],
-        cwd=git_repo,
-        check=True,
-        capture_output=True,
-    )
-    after = subprocess.check_output(
-        ["git", "rev-parse", "HEAD"], cwd=git_repo, text=True
-    ).strip()
-
-    (git_repo / "b.py").write_text("b = 2")
-    subprocess.run(
-        ["git", "add", "b.py"], cwd=git_repo, check=True, capture_output=True
-    )
-    subprocess.run(
-        ["git", "commit", "-m", "add b"],
-        cwd=git_repo,
-        check=True,
-        capture_output=True,
-    )
-    before = subprocess.check_output(
-        ["git", "rev-parse", "HEAD~1"], cwd=git_repo, text=True
-    ).strip()
+    _make_commit(git_repo, "a.py", "a = 1")
+    after = _get_hash(git_repo)
+    _make_commit(git_repo, "b.py", "b = 2")
+    before = _get_hash(git_repo, "HEAD~1")
 
     ctx.reset_mock()
     handler = make_verify_handler(ctx)
@@ -307,19 +283,8 @@ def test_simplify_commit_mode_both_task_id_and_before(ctx: MagicMock, git_repo: 
 
 def test_simplify_commit_mode_before_only(ctx: MagicMock, git_repo: Path):
     """Simplify with only 'before' should diff before..HEAD and dispatch."""
-    (git_repo / "app.py").write_text("print(1)\n")
-    subprocess.run(
-        ["git", "add", "app.py"], cwd=git_repo, check=True, capture_output=True
-    )
-    subprocess.run(
-        ["git", "commit", "-m", "add app"],
-        cwd=git_repo,
-        check=True,
-        capture_output=True,
-    )
-    before = subprocess.check_output(
-        ["git", "rev-parse", "HEAD~1"], cwd=git_repo, text=True
-    ).strip()
+    _make_commit(git_repo, "app.py", "print(1)\n")
+    before = _get_hash(git_repo, "HEAD~1")
 
     ctx.reset_mock()
     handler = make_simplify_handler(ctx)
@@ -335,33 +300,10 @@ def test_simplify_commit_mode_before_only(ctx: MagicMock, git_repo: Path):
 
 def test_simplify_commit_mode_before_after(ctx: MagicMock, git_repo: Path):
     """Simplify with before+after should diff the exact range."""
-    (git_repo / "x.py").write_text("x = 1")
-    subprocess.run(
-        ["git", "add", "x.py"], cwd=git_repo, check=True, capture_output=True
-    )
-    subprocess.run(
-        ["git", "commit", "-m", "add x"],
-        cwd=git_repo,
-        check=True,
-        capture_output=True,
-    )
-    after = subprocess.check_output(
-        ["git", "rev-parse", "HEAD"], cwd=git_repo, text=True
-    ).strip()
-
-    (git_repo / "y.py").write_text("y = 2")
-    subprocess.run(
-        ["git", "add", "y.py"], cwd=git_repo, check=True, capture_output=True
-    )
-    subprocess.run(
-        ["git", "commit", "-m", "add y"],
-        cwd=git_repo,
-        check=True,
-        capture_output=True,
-    )
-    before = subprocess.check_output(
-        ["git", "rev-parse", "HEAD~1"], cwd=git_repo, text=True
-    ).strip()
+    _make_commit(git_repo, "x.py", "x = 1")
+    after = _get_hash(git_repo)
+    _make_commit(git_repo, "y.py", "y = 2")
+    before = _get_hash(git_repo, "HEAD~1")
 
     ctx.reset_mock()
     handler = make_simplify_handler(ctx)
@@ -414,16 +356,7 @@ def test_simplify_success(ctx: MagicMock, git_repo: Path):
     # Set stage to "verify" so simplify can proceed
     state.set_stage(task_id, "verify")
 
-    (git_repo / "app.py").write_text("print(1)\n")
-    subprocess.run(
-        ["git", "add", "app.py"], cwd=git_repo, check=True, capture_output=True
-    )
-    subprocess.run(
-        ["git", "commit", "-m", "add app"],
-        cwd=git_repo,
-        check=True,
-        capture_output=True,
-    )
+    _make_commit(git_repo, "app.py", "print(1)\n")
 
     ctx.reset_mock()
     simplify_handler = make_simplify_handler(ctx)
