@@ -27,6 +27,11 @@ IMPLEMENT_SCHEMA = {
         "The subagent has terminal and file access. "
         "It will report BLOCKED if genuinely stuck."
         "\n\n"
+        "Pass the 'plan' parameter with the full requirements checklist "
+        "from Phase 0 (see skill jovaltus-agent). "
+        "The plan is passed verbatim to the implement subagent as "
+        "context under a ## Plan section."
+        "\n\n"
         "The returned start_hash can be passed to jovaltus_verify or "
         "jovaltus_simplify as the 'before' parameter for commit-based mode."
     ),
@@ -38,6 +43,15 @@ IMPLEMENT_SCHEMA = {
                 "description": (
                     "Absolute path to the git repository. "
                     "Defaults to the current working directory."
+                ),
+            },
+            "plan": {
+                "type": "string",
+                "description": (
+                    "Structured requirements checklist from Phase 0 planning. "
+                    "Passed verbatim to the implement subagent so it knows "
+                    "exactly what to implement. Should include acceptance "
+                    "criteria, file paths, and any design decisions."
                 ),
             },
         },

@@ -237,6 +237,7 @@ def make_implement_handler(ctx: Any) -> Callable[..., str]:
 
     def handler(args: dict[str, Any], **kwargs: Any) -> str:
         project_dir = _resolve_dir(args.get("project_dir"))
+        plan = args.get("plan", "")
 
         # Stage validation: don't start implement if another task is active
         active = state.get_active_task()
@@ -288,6 +289,7 @@ def make_implement_handler(ctx: Any) -> Callable[..., str]:
                         f"## Project Context\n\n"
                         f"Working directory: {project_dir}\n"
                         f"Reference commit: {start_hash}\n"
+                        + (f"\n## Plan\n\n{plan}\n" if plan else "")
                     ),
                     "toolsets": ["terminal", "file"],
                 },
@@ -300,6 +302,7 @@ def make_implement_handler(ctx: Any) -> Callable[..., str]:
                     "project_dir": project_dir,
                     "subagent": "spawned",
                     "phase": "implement",
+                    "plan": plan,
                 }
             )
 

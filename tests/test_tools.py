@@ -68,6 +68,41 @@ def test_implement_success(ctx: MagicMock, git_repo: Path):
     assert "implement" in call_args[1]["goal"].lower()
 
 
+def test_implement_with_plan(ctx: MagicMock, git_repo: Path):
+    """Implement with plan should pass plan to subagent context."""
+    handler = make_implement_handler(ctx)
+    plan_text = (
+        "## Requirements Checklist\n\n"
+        '- Add /api/health endpoint that returns {"status": "ok"}\n'
+        "- Add input validation to POST /api/users\n"
+        "- Write tests for both endpoints\n"
+    )
+    result = json.loads(handler({"project_dir": str(git_repo), "plan": plan_text}))
+
+    assert "task_id" in result
+    assert result["plan"] == plan_text
+
+    # Verify plan appears in dispatched context
+    call_args = ctx.dispatch_tool.call_args[0]
+    context = call_args[1]["context"]
+    assert "## Plan" in context
+    assert "/api/health" in context
+    assert "input validation" in context
+
+
+def test_implement_without_plan_omits_plan_section(ctx: MagicMock, git_repo: Path):
+    """Implement without plan should not include ## Plan in context."""
+    handler = make_implement_handler(ctx)
+    result = json.loads(handler({"project_dir": str(git_repo)}))
+
+    assert "task_id" in result
+
+    call_args = ctx.dispatch_tool.call_args[0]
+    context = call_args[1]["context"]
+    assert "## Plan" not in context
+    assert result["plan"] == ""
+
+
 # ── jovaltus_verify ───────────────────────────────────────────────
 
 
