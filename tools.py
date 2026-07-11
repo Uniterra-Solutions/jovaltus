@@ -3,12 +3,16 @@
 Each handler is created by a factory function in register() that captures
 the Hermes plugin context (ctx). When the LLM calls the tool, the handler:
 
-1. Validates the current pipeline stage (Layer 3)
-2. Records state (git hash, task_id)
+1. Validates the current pipeline stage (Layer 3) — only in task_id mode
+2. Records state (git hash, task_id) — only in task_id mode
 3. Reads the appropriate system prompt from prompts/*.md
 4. Spawns a subagent via ctx.dispatch_tool("delegate_task", ...)
-   with the prompt as the goal
+   with the prompt as the goal and the diff as context
 5. Returns immediately (subagent runs in background)
+
+Two invocation modes:
+- task_id mode: state-bound, respects pipeline stage ordering
+- commit mode: stateless, uses before/after commit hashes directly
 """
 
 import json
@@ -39,6 +43,15 @@ def _resolve_dir(project_dir: str | None = None) -> str:
     return str(Path(project_dir or ".").resolve())
 
 
+def _resolve_commit_range(before: str, after: str | None = None) -> tuple[str, str]:
+    """Resolve before/after to a concrete commit range.
+
+    When *after* is None, defaults to HEAD.
+    Returns (before, after).
+    """
+    return before, after or "HEAD"
+
+
 def _spawn_review_subagent(
     ctx: Any,
     prompt: str,
@@ -50,10 +63,10 @@ def _spawn_review_subagent(
     project_dir: str,
     toolsets: list[str] | None = None,
 ) -> str:
-    """Shared logic for verify/simplify handlers: look up task, diff, and spawn subagent.
+    """Shared logic for verify/simplify handlers in task_id mode.
 
-    All parameters are literals supplied by each handler's closure so that
-    log messages, context titles, and the phase field reflect the correct phase.
+    Looks up the task from in-memory state, computes the diff from
+    start_hash..HEAD, and spawns a subagent with the diff context.
     toolsets defaults to ["terminal", "file"] if not provided.
     Returns a JSON string with spawn results or error.
     """
@@ -119,6 +132,100 @@ def _spawn_review_subagent(
     except Exception as e:
         logger.exception("jovaltus_%s failed", phase_label)
         return json.dumps({"error": str(e)})
+
+
+def _spawn_commit_review_subagent(
+    ctx: Any,
+    prompt: str,
+    phase_label: str,
+    section_title: str,
+    diff_label: str,
+    subagent_label: str,
+    before: str,
+    after: str,
+    project_dir: str,
+    toolsets: list[str] | None = None,
+) -> str:
+    """Spawn a review subagent for commit-based (stateless) mode.
+
+    Computes the diff from before..after directly and spawns a subagent
+    with the diff context. No state lookup or stage validation.
+    toolsets defaults to ["terminal", "file"] if not provided.
+    Returns a JSON string with spawn results or error.
+    """
+    if toolsets is None:
+        toolsets = ["terminal", "file"]
+
+    try:
+        diff_text = git_utils.get_diff(before, after, project_dir)
+        files = git_utils.get_diff_stat(before, after, project_dir)
+
+        logger.info(
+            "jovaltus_%s: spawning %s subagent (commit mode) "
+            "range=%s..%s files=%d toolsets=%s",
+            phase_label,
+            subagent_label,
+            before[:12] if len(before) > 12 else before,
+            after[:12] if len(after) > 12 else after,
+            len(files),
+            toolsets,
+        )
+
+        ctx.dispatch_tool(
+            "delegate_task",
+            {
+                "goal": prompt,
+                "context": (
+                    f"## {section_title}\n\n"
+                    f"Working directory: {project_dir}\n"
+                    f"Diff range: {before}..{after}\n"
+                    f"Toolsets: {toolsets}\n"
+                    f"Files changed:\n"
+                    + "\n".join(
+                        f"  {f['path']} (+{f['additions']}/-{f['deletions']})"
+                        for f in files
+                    )
+                    + f"\n\n## {diff_label}\n\n```diff\n{diff_text}\n```"
+                ),
+                "toolsets": toolsets,
+            },
+        )
+
+        return json.dumps(
+            {
+                "before": before,
+                "after": after,
+                "diff": diff_text,
+                "files_changed": files,
+                "project_dir": project_dir,
+                "subagent": "spawned",
+                "phase": phase_label,
+                "toolsets": toolsets,
+                "pipeline_mode": False,
+            }
+        )
+
+    except Exception as e:
+        logger.exception("jovaltus_%s (commit mode) failed", phase_label)
+        return json.dumps({"error": str(e)})
+
+
+def _validate_task_id_before_exclusive(task_id: str, before: str) -> str | None:
+    """Check that task_id and before are not both provided.
+
+    Returns an error JSON string if both are present, or None on success.
+    """
+    if task_id and before:
+        return json.dumps(
+            {
+                "error": (
+                    "Provide task_id or before, not both. "
+                    "task_id is for stateful pipeline mode; "
+                    "before is for stateless commit-based mode."
+                ),
+            }
+        )
+    return None
 
 
 # ── Factory functions (called from register()) ──────────────────────
@@ -204,12 +311,52 @@ def make_implement_handler(ctx: Any) -> Callable[..., str]:
 
 
 def make_verify_handler(ctx: Any) -> Callable[..., str]:
-    """Create jovaltus_verify handler with ctx closure."""
+    """Create jovaltus_verify handler with ctx closure.
+
+    Supports two modes:
+    - task_id mode: stateful, enforces pipeline stage ordering
+    - commit mode (before/after): stateless, bypasses stage validation
+    """
     prompt = _read_prompt("verify")
 
     def handler(args: dict[str, Any], **kwargs: Any) -> str:
         task_id = args.get("task_id", "")
+        before = args.get("before", "")
+        after = args.get("after", "")
         project_dir = _resolve_dir(args.get("project_dir"))
+
+        # Validate mutual exclusivity
+        conflict = _validate_task_id_before_exclusive(task_id, before)
+        if conflict:
+            return conflict
+
+        # ── Commit mode (stateless) ──────────────────────────────
+        if before:
+            effective_before, effective_after = _resolve_commit_range(
+                before, after or None
+            )
+            return _spawn_commit_review_subagent(
+                ctx,
+                prompt,
+                "verify",
+                "Verification Context",
+                "Git Diff",
+                "verify",
+                effective_before,
+                effective_after,
+                project_dir,
+                toolsets=["terminal", "file", "computer_use"],
+            )
+
+        # ── Task ID mode (state-bound) ───────────────────────────
+        if not task_id:
+            return json.dumps(
+                {
+                    "error": (
+                        "Provide task_id (pipeline mode) or before (commit-based mode)."
+                    ),
+                }
+            )
 
         # Stage validation: must be in "implement" stage
         task = state.get_task(task_id)
@@ -235,7 +382,9 @@ def make_verify_handler(ctx: Any) -> Callable[..., str]:
             )
         if not state.set_stage(task_id, "verify"):
             return json.dumps(
-                {"error": f"Stage transition {current_stage} \u2192 verify rejected."}
+                {
+                    "error": (f"Stage transition {current_stage} → verify rejected."),
+                }
             )
 
         return _spawn_review_subagent(
@@ -254,12 +403,51 @@ def make_verify_handler(ctx: Any) -> Callable[..., str]:
 
 
 def make_simplify_handler(ctx: Any) -> Callable[..., str]:
-    """Create jovaltus_simplify handler with ctx closure."""
+    """Create jovaltus_simplify handler with ctx closure.
+
+    Supports two modes:
+    - task_id mode: stateful, enforces pipeline stage ordering
+    - commit mode (before/after): stateless, bypasses stage validation
+    """
     prompt = _read_prompt("simplify")
 
     def handler(args: dict[str, Any], **kwargs: Any) -> str:
         task_id = args.get("task_id", "")
+        before = args.get("before", "")
+        after = args.get("after", "")
         project_dir = _resolve_dir(args.get("project_dir"))
+
+        # Validate mutual exclusivity
+        conflict = _validate_task_id_before_exclusive(task_id, before)
+        if conflict:
+            return conflict
+
+        # ── Commit mode (stateless) ──────────────────────────────
+        if before:
+            effective_before, effective_after = _resolve_commit_range(
+                before, after or None
+            )
+            return _spawn_commit_review_subagent(
+                ctx,
+                prompt,
+                "simplify",
+                "Simplification Context",
+                "Clean Diff",
+                "simplifier",
+                effective_before,
+                effective_after,
+                project_dir,
+            )
+
+        # ── Task ID mode (state-bound) ───────────────────────────
+        if not task_id:
+            return json.dumps(
+                {
+                    "error": (
+                        "Provide task_id (pipeline mode) or before (commit-based mode)."
+                    ),
+                }
+            )
 
         # Stage validation: must be in "verify" stage
         task = state.get_task(task_id)
@@ -270,7 +458,7 @@ def make_simplify_handler(ctx: Any) -> Callable[..., str]:
                     "hint": "Did you call jovaltus_implement first?",
                 }
             )
-        current_stage = task.get("stage", "idle")
+        current_stage = task.get("stage", "verify")
         if current_stage != "verify":
             return json.dumps(
                 {
@@ -285,7 +473,9 @@ def make_simplify_handler(ctx: Any) -> Callable[..., str]:
             )
         if not state.set_stage(task_id, "simplify"):
             return json.dumps(
-                {"error": f"Stage transition {current_stage} \u2192 simplify rejected."}
+                {
+                    "error": (f"Stage transition {current_stage} → simplify rejected."),
+                }
             )
 
         return _spawn_review_subagent(

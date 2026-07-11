@@ -2,7 +2,7 @@
 
 ## Build & Test
 
-- `uv run pytest -v` — Run full test suite (60 tests, ~2.7s)
+- `uv run pytest -v` — Run full test suite (68 tests, ~3.6s)
 - `uv run ruff check .` — Lint (zero warnings)
 - `uv run ruff format --check .` — Format check (auto-format with `ruff format .`)
 - `uv run mypy --strict --no-site-packages *.py` — Type check (zero errors)
@@ -23,14 +23,16 @@ Run manually: `pre-commit run --all-files`
 
 - `plugin.yaml` + `__init__.py` — Hermes plugin entry (root dir IS the package)
 - `tools.py` — Three tool handler factories (implement, verify, simplify)
+  - Dual-mode: task_id for stateful pipeline, before/after for stateless commit mode
 - `schemas.py` — Tool JSON schemas (what the LLM sees)
+  - verify/simplify schemas include optional before/after params
 - `state.py` — Thread-safe in-memory task state
 - `git_utils.py` — Git subprocess wrappers (list args, no shell=True)
   - New in v0.2.0: remote update utilities (fetch, pull, ahead/behind check)
 - `SOUL.md` — Bundled agent identity file; applied to profile via `setup`
 - `prompts/*.md` — Subagent system prompts (editable without touching Python)
 - `skills/jovaltus-agent/SKILL.md` — Agent Mode workflow definition
-- `tests/` — 44 pytest tests across 5 test files + conftest.py
+- `tests/` — 68 pytest tests across 7 test files + conftest.py
 
 ## Key Constraints
 
@@ -67,7 +69,18 @@ Run manually: `pre-commit run --all-files`
 
 ## Workflow
 
+### Stateful Pipeline (task_id mode)
+
 1. User confirms requirements (Phase 0)
 2. Main agent calls `jovaltus_implement` → handler spawns implement subagent
 3. Main agent calls `jovaltus_verify(task_id)` → handler spawns verification subagent
 4. Main agent calls `jovaltus_simplify(task_id)` → handler spawns simplifier subagent
+
+### Stateless Commit Mode
+
+For verify and simplify tools, pass `before` (and optionally `after`) commit hashes
+instead of `task_id` to skip pipeline state and operate on any commit range:
+- `jovaltus_verify(before=<hash>)` → verifies before..HEAD
+- `jovaltus_verify(before=<hash>, after=<hash>)` → verifies exact range
+- `jovaltus_simplify(before=<hash>)` → simplifies before..HEAD
+- `task_id` and `before` are mutually exclusive

@@ -129,7 +129,220 @@ def test_verify_success(ctx: MagicMock, git_repo: Path):
     assert ctx.dispatch_tool.called
 
 
-# ── jovaltus_simplify ─────────────────────────────────────────────
+# ── jovaltus_verify (commit-based mode) ───────────────────────────
+
+
+def test_verify_commit_mode_no_params(ctx: MagicMock, git_repo: Path):
+    """Verify should error if neither task_id nor before is given."""
+    handler = make_verify_handler(ctx)
+    result = json.loads(handler({"project_dir": str(git_repo)}))
+    assert "error" in result
+    assert "task_id" in result["error"].lower() or "before" in result["error"].lower()
+
+
+def test_verify_commit_mode_both_task_id_and_before(ctx: MagicMock, git_repo: Path):
+    """Verify should error if both task_id and before are provided."""
+    handler = make_verify_handler(ctx)
+    result = json.loads(
+        handler(
+            {
+                "task_id": "jt-123",
+                "before": "abc123",
+                "project_dir": str(git_repo),
+            }
+        )
+    )
+    assert "error" in result
+    assert "not both" in result["error"].lower()
+
+
+def test_verify_commit_mode_before_only(ctx: MagicMock, git_repo: Path):
+    """Verify with only 'before' should diff before..HEAD and dispatch."""
+    # Make a commit so we have a reference point
+    (git_repo / "file.py").write_text("x = 1")
+    subprocess.run(
+        ["git", "add", "file.py"], cwd=git_repo, check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "add file"],
+        cwd=git_repo,
+        check=True,
+        capture_output=True,
+    )
+    before = subprocess.check_output(
+        ["git", "rev-parse", "HEAD~1"], cwd=git_repo, text=True
+    ).strip()
+
+    ctx.reset_mock()
+    handler = make_verify_handler(ctx)
+    result = json.loads(handler({"before": before, "project_dir": str(git_repo)}))
+
+    assert result["subagent"] == "spawned"
+    assert result["phase"] == "verify"
+    assert "before" in result
+    assert "after" in result
+    assert result["pipeline_mode"] is False
+    assert ctx.dispatch_tool.called
+
+    # Verify the diff is against HEAD (not HEAD~1 alone)
+    call_args = ctx.dispatch_tool.call_args[0]
+    context = call_args[1]["context"]
+    assert before in context
+    assert "file.py" in context
+
+
+def test_verify_commit_mode_before_after(ctx: MagicMock, git_repo: Path):
+    """Verify with before+after should diff the exact range."""
+    (git_repo / "a.py").write_text("a = 1")
+    subprocess.run(
+        ["git", "add", "a.py"], cwd=git_repo, check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "add a"],
+        cwd=git_repo,
+        check=True,
+        capture_output=True,
+    )
+    after = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=git_repo, text=True
+    ).strip()
+
+    (git_repo / "b.py").write_text("b = 2")
+    subprocess.run(
+        ["git", "add", "b.py"], cwd=git_repo, check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "add b"],
+        cwd=git_repo,
+        check=True,
+        capture_output=True,
+    )
+    before = subprocess.check_output(
+        ["git", "rev-parse", "HEAD~1"], cwd=git_repo, text=True
+    ).strip()
+
+    ctx.reset_mock()
+    handler = make_verify_handler(ctx)
+    result = json.loads(
+        handler(
+            {
+                "before": before,
+                "after": after,
+                "project_dir": str(git_repo),
+            }
+        )
+    )
+
+    assert result["subagent"] == "spawned"
+    assert result["after"] == after
+    assert result["before"] == before
+
+    # Context should reference the exact range
+    call_args = ctx.dispatch_tool.call_args[0]
+    context = call_args[1]["context"]
+    assert before in context
+    assert after in context
+
+
+# ── jovaltus_simplify (commit-based mode) ─────────────────────────
+
+
+def test_simplify_commit_mode_no_params(ctx: MagicMock, git_repo: Path):
+    """Simplify should error if neither task_id nor before is given."""
+    handler = make_simplify_handler(ctx)
+    result = json.loads(handler({"project_dir": str(git_repo)}))
+    assert "error" in result
+
+
+def test_simplify_commit_mode_both_task_id_and_before(ctx: MagicMock, git_repo: Path):
+    """Simplify should error if both task_id and before are provided."""
+    handler = make_simplify_handler(ctx)
+    result = json.loads(
+        handler(
+            {
+                "task_id": "jt-123",
+                "before": "abc123",
+                "project_dir": str(git_repo),
+            }
+        )
+    )
+    assert "error" in result
+    assert "not both" in result["error"].lower()
+
+
+def test_simplify_commit_mode_before_only(ctx: MagicMock, git_repo: Path):
+    """Simplify with only 'before' should diff before..HEAD and dispatch."""
+    (git_repo / "app.py").write_text("print(1)\n")
+    subprocess.run(
+        ["git", "add", "app.py"], cwd=git_repo, check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "add app"],
+        cwd=git_repo,
+        check=True,
+        capture_output=True,
+    )
+    before = subprocess.check_output(
+        ["git", "rev-parse", "HEAD~1"], cwd=git_repo, text=True
+    ).strip()
+
+    ctx.reset_mock()
+    handler = make_simplify_handler(ctx)
+    result = json.loads(handler({"before": before, "project_dir": str(git_repo)}))
+
+    assert result["subagent"] == "spawned"
+    assert result["phase"] == "simplify"
+    assert "before" in result
+    assert "after" in result
+    assert result["pipeline_mode"] is False
+    assert ctx.dispatch_tool.called
+
+
+def test_simplify_commit_mode_before_after(ctx: MagicMock, git_repo: Path):
+    """Simplify with before+after should diff the exact range."""
+    (git_repo / "x.py").write_text("x = 1")
+    subprocess.run(
+        ["git", "add", "x.py"], cwd=git_repo, check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "add x"],
+        cwd=git_repo,
+        check=True,
+        capture_output=True,
+    )
+    after = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=git_repo, text=True
+    ).strip()
+
+    (git_repo / "y.py").write_text("y = 2")
+    subprocess.run(
+        ["git", "add", "y.py"], cwd=git_repo, check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "add y"],
+        cwd=git_repo,
+        check=True,
+        capture_output=True,
+    )
+    before = subprocess.check_output(
+        ["git", "rev-parse", "HEAD~1"], cwd=git_repo, text=True
+    ).strip()
+
+    ctx.reset_mock()
+    handler = make_simplify_handler(ctx)
+    result = json.loads(
+        handler(
+            {
+                "before": before,
+                "after": after,
+                "project_dir": str(git_repo),
+            }
+        )
+    )
+
+    assert result["subagent"] == "spawned"
+    assert result["after"] == after
+    assert result["before"] == before
 
 
 def test_simplify_no_task_id(ctx: MagicMock):

@@ -23,7 +23,7 @@ description: >-
   When in doubt: do NOT load. Confirm with the user before
   committing to a 4-phase run.
 author: LaiTszKin
-version: 0.3.0
+version: 0.4.0
 metadata:
   jovaltus:
     tags: [development, pipeline, code-quality, verification, multi-agent]
@@ -40,7 +40,8 @@ The output is a verified, simplified commit produced by the pipeline subagents.
 ## Acceptance Criteria
 
 - Each phase transitions through validated stages: idle → implement → verify → simplify → done
-- Stage validation rejects out-of-order tool calls with a clear error message
+- Stage validation rejects out-of-order tool calls with a clear error message (task_id mode)
+- Commit-based mode (before/after params) bypasses stage validation for stateless operation
 - Stage guidance banner appears before each LLM turn when a pipeline task is active
 - Direct Delegate Pattern documented as escape hatch when in-memory state is stale
 
@@ -75,13 +76,21 @@ Choose the implementation path:
 
 ### Phase 2: Verify & Fix — stage: implement → verify
 
-**Stage constraint:** Requires stage "implement". Call `jovaltus_verify(task_id=...)`.
+**Stage constraint (task_id mode):** Requires stage "implement". Call `jovaltus_verify(task_id=...)`.
+
+**Commit mode (stateless):** Pass `before=<hash>` directly. Bypasses stage validation.
+Useful when:
+- Task state has been lost (process restart, cross-session work)
+- You manually committed changes and want to verify a specific range
+- You want to iterate on the same diff multiple times
 
 The verification subagent runs tests adversarially, reviews the diff for bugs, fixes everything found, and re-verifies until clean. It has write access and commits when done.
 
 ### Phase 3: Simplify — stage: verify → simplify
 
-**Stage constraint:** Requires stage "verify". Call `jovaltus_simplify(task_id=...)`.
+**Stage constraint (task_id mode):** Requires stage "verify". Call `jovaltus_simplify(task_id=...)`.
+
+**Commit mode (stateless):** Pass `before=<hash>` directly. Bypasses stage validation.
 
 The simplifier subagent applies structural improvements without behaviour change: extract repeated code, delete dead code (grep-backed), flatten nesting, improve naming. After simplification, run `pytest` (or the project's test framework) to confirm behaviour is preserved. Subagent commits when done.
 
@@ -92,8 +101,8 @@ Present the final result: what was implemented, what issues were found and fixed
 ## Gotchas
 
 - **Dirty working tree corrupts the verification diff.** The pipeline records `git rev-parse HEAD` as the baseline. If the working tree has uncommitted changes before Phase 1, those changes are included in the `start_hash..HEAD` diff — the verification subagent will inspect and potentially "fix" code it didn't write. Always check `git status --porcelain` before starting Phase 1.
-- **In-memory state is process-local.** Task IDs and stage tracking live in plugin memory. If the agent process restarts or you commit changes via `git` directly (not through the tools), the task state is lost and the stage becomes unknown. The hooks will stop injecting guidance.
-- **Escape hatch — Direct Delegate Pattern.** When state is stale, bypass the tools entirely: read the prompt file (`prompts/verify.md` or `prompts/simplify.md`), compute the correct baseline diff (`git diff <original_baseline>..HEAD`), and call `delegate_task(goal=<prompt>, context=<diff context>, toolsets=["terminal", "file"])`. This gives full control over the baseline and avoids the state dependency. If the original baseline is unknown, use `HEAD~1` as a heuristic.
+- **In-memory state is process-local.** Task IDs and stage tracking live in plugin memory. If the agent process restarts or you commit changes via `git` directly (not through the tools), the task state is lost and the stage becomes unknown. The hooks will stop injecting guidance. **Solution:** Use commit-based mode (`jovaltus_verify(before=<hash>)`) instead of `task_id` mode — it requires no state and works across restarts.
+- **Direct Delegate Pattern (legacy escape hatch).** Before commit-based mode existed, the only way to work around stale state was to bypass the tools entirely: read the prompt file, compute the diff, and call `delegate_task` directly. **Now prefer commit-based mode** (`jovaltus_verify(before=<hash>)`) instead — it keeps the structured tool interface and is simpler. Use the Direct Delegate Pattern only when you need full control over the subagent's context (e.g., custom prompt blending).
 - **Subagent crash mid-phase leaves partial changes.** If a subagent fails mid-flight, the working tree may contain incomplete edits. The pipeline does NOT auto-rollback. Manually run `git checkout -- .` or `git reset --hard HEAD` to discard partial changes before retrying. Verify with `git status` after cleanup.
 - **Verify fix loop has no iteration cap.** The verification subagent retries until all checks pass. If a bug is genuinely unfixable (broken test fixture, upstream API change), the loop may diverge. If you see more than 3-4 retry cycles, intervene manually.
 - **Stage validation is not a security boundary.** A determined agent can always call `delegate_task` directly. The stage machine is a productivity guide, not a guard.
