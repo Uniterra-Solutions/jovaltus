@@ -26,6 +26,7 @@ packages = ["src/jovaltus"]
 
 [tool.mypy]
 strict = true
+files = ["src/jovaltus"]
 no_namespace_packages = true
 show_error_codes = true
 
