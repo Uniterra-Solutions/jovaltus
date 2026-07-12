@@ -1,0 +1,99 @@
+# Architecture — {{PROJECT_NAME}}
+
+## System Context (C4 Level 1)
+
+```mermaid
+graph TD
+    User[User] -->|HTTP| System[{{PROJECT_NAME}}]
+    System -->|SQL| DB[({{DATABASE_TYPE}})]
+    System -->|Cache| Redis[(Redis)]
+    System -->|{{EXTERNAL_SERVICE_PROTOCOL}}| {{EXTERNAL_SERVICE_NAME}}[{{EXTERNAL_SERVICE_NAME}}]
+```
+
+**Users:** {{USER_TYPES}}
+
+**External services:**
+| Service | Purpose | Protocol |
+|---------|---------|----------|
+| {{DATABASE_TYPE}} | Primary data store | SQL |
+| Redis | Cache / Queue | Redis protocol |
+| {{EXTERNAL_SERVICE_NAME}} | {{EXTERNAL_SERVICE_PURPOSE}} | {{EXTERNAL_SERVICE_PROTOCOL}} |
+
+---
+
+## Container View (C4 Level 2)
+
+```mermaid
+graph TD
+    Client[Client] -->|HTTPS| Web[{{WEB_ENTRY}}]
+    Web -->|HTTP| API[{{API_SERVER}}]
+    API -->|SQL| DB[({{DATABASE_TYPE}})]
+    API -->|Cache| Redis[(Redis)]
+    API -->|Queue| Worker[{{WORKER_NAME}}]
+    Worker -->|{{EXTERNAL_SERVICE_PROTOCOL}}| {{EXTERNAL_SERVICE_NAME}}
+```
+
+| Container | Technology | Purpose |
+|-----------|-----------|---------|
+| Web | {{WEB_TECH}} | Serves frontend assets |
+| API | {{API_TECH}} | Business logic, auth, routing |
+| Worker | {{WORKER_TECH}} | Background job processing |
+| DB | {{DATABASE_TYPE}} {{DB_VERSION}} | Persistent data |
+| Redis | Redis {{REDIS_VERSION}} | Cache + job queue |
+
+---
+
+## Data Flow
+
+### Request Lifecycle
+1. Client sends HTTPS request to `{{WEB_ENTRY}}`
+2. {{WEB_ENTRY}} proxies API requests to `{{API_SERVER}}`
+3. {{API_SERVER}} authenticates via {{AUTH_METHOD}}
+4. {{API_SERVER}} reads/writes to {{DATABASE_TYPE}} via {{ORM_NAME}}
+5. For long-running tasks, {{API_SERVER}} enqueues job to Redis
+6. {{WORKER_NAME}} picks up job, processes, updates status
+
+### Auth Flow
+1. User POSTs credentials to `{{AUTH_ENDPOINT}}`
+2. Server validates against {{AUTH_STORE}}
+3. Server returns {{TOKEN_TYPE}} token
+4. Client includes token in `{{AUTH_HEADER}}` header
+5. {{AUTH_MIDDLEWARE}} validates on each request
+
+---
+
+## Key Architectural Decisions
+
+| Decision | Rationale | Status | Date |
+|----------|-----------|--------|------|
+| {{DECISION_1_TITLE}} | {{DECISION_1_RATIONALE}} | Active | {{DATE}} |
+| {{DECISION_2_TITLE}} | {{DECISION_2_RATIONALE}} [INFERRED] | Active | {{DATE}} |
+
+---
+
+## Deployment
+
+{{DEPLOYMENT_DESCRIPTION}}
+
+```mermaid
+graph LR
+    CI[CI/CD] -->|Build| Image[Docker Image]
+    Image -->|Push| Registry[Container Registry]
+    Registry -->|Deploy| Env[{{DEPLOY_ENV}}]
+```
+
+---
+
+## How to Update
+- New service or external dependency added? → Add node to System Context diagram
+- Container added/removed? → Update Container View diagram
+- Auth method changed? → Update Auth Flow
+- New architectural decision made? → Add row to decisions table
+- Deployment pipeline changed? → Update Deployment section
+
+## Find It Fast
+```bash
+grep -r "class.*Config" src/          # All configuration classes
+grep -r "router" src/api/            # Route definitions
+grep -r "import.*redis" src/         # Redis usage points
+```
