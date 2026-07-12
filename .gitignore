@@ -13,3 +13,6 @@ __pycache__/
 # IDE
 .vscode/
 .idea/
+
+# Eval results
+eval_results/
