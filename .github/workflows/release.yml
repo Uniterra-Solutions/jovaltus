@@ -35,7 +35,7 @@ jobs:
         run: uv run pytest --ignore=tests/integration/
 
       - name: Type check (mypy)
-        run: uv run mypy
+        run: uv run mypy src/jovaltus
 
       - name: Extract version from tag
         id: version
