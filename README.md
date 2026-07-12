@@ -150,9 +150,10 @@ Subagent works in background:
 ### Step 1: Install the Plugin
 
 ```bash
-# 從 GitHub 安裝
-hermes plugins install LaiTszKin/jovaltus --enable
+pip install jovaltus && hermes plugins enable jovaltus
 ```
+
+> `fabricium` 會作為依賴自動安裝。
 
 ### Step 2: Setup
 

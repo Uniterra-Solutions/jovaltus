@@ -374,7 +374,7 @@ def test_simplify_success(ctx: MagicMock, git_repo: Path):
 
 def test_prompt_files_exist():
     """The three prompt files should be present and non-empty."""
-    base = Path(__file__).parent.parent / "prompts"
+    base = Path(__file__).parent.parent / "src" / "jovaltus" / "prompts"
     for name in ["implement", "verify", "simplify"]:
         path = base / f"{name}.md"
         assert path.exists(), f"Missing prompt: {path}"
