@@ -21,7 +21,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import state, git_utils
+from fabricium import git_utils
+
+from . import state
 
 logger = logging.getLogger(__name__)
 

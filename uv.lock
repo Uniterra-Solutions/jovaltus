@@ -3,6 +3,21 @@ revision = 3
 requires-python = ">=3.10"
 
 [[package]]
+name = "fabricium"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1f/51/a3d3783801f7a84e4eeef9eecfdacdc7bc5d29a112ce1347307aa2b07ad2/fabricium-0.1.1.tar.gz", hash = "sha256:67325ad77145312aef5940c6567bf231fddca34e6a349b9eff8f70444e2599b1", size = 90080, upload-time = "2026-07-12T11:36:55.787Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5a/29/4bf489395ec1c00c9ed72c672f7a5c6d8b16fee32592a811b5bc4a40ff9e/fabricium-0.1.1-py3-none-any.whl", hash = "sha256:5c43a1cd53a42597077d0e0c5b202b7ed75f44933f51248edb4cc20bff813f6a", size = 52060, upload-time = "2026-07-12T11:36:54.72Z" },
+]
+
+[[package]]
 name = "jovaltus"
 version = "0.4.0"
 source = { editable = "." }
+dependencies = [
+    { name = "fabricium" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "fabricium", specifier = ">=0.1.1" }]

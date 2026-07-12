@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 
 
-from jovaltus import git_utils
+from fabricium import git_utils
 
 
 def test_is_git_repo_true(git_repo: Path):
@@ -116,7 +116,7 @@ def test_get_local_head_default(git_repo: Path):
 
 def test_get_local_head_nonexistent_branch(git_repo: Path):
     """get_local_head with a branch that doesn't exist should return None."""
-    sha = git_utils.get_local_head(str(git_repo), branch="nonexistent-branch-xyz")
+    sha = git_utils.get_local_head(str(git_repo), ref="nonexistent-branch-xyz")
     assert sha is None
 
 
