@@ -51,7 +51,8 @@ a concrete fix suggestion.
 ### Checklist
 
 - [ ] Every relative link in `docs/` points to an existing file
-  - Verify: `grep -rohP '\[.*\]\(\./[^)]+\)' docs/ | sort | uniq` — check each target exists
+  - Verify: `grep -rohE '\[.*\]\(\.\/[^)]+\)' docs/ | sort | uniq` — check each target exists
+  - macOS note: BSD grep doesn't support `-P`; use `-E` for extended regex instead
 - [ ] Every source code reference (`src/auth/index.ts:1`) points to a real file
   - Verify: spot-check file paths
 - [ ] No broken internal anchors (e.g., `[Setup](setup.md#database)` but setup.md has no `#database` heading)
@@ -114,7 +115,7 @@ Stale sections:
 ### Checklist
 
 - [ ] No fluff phrases: search for "in this document", "we will explore", "it's important to note", "please remember", "as you can see", "needless to say"
-  - Verify: `grep -rPn '(in this document|we will explore|it.s important to note|please remember|as you can see|needless to say|it is worth mentioning)' docs/`
+  - Verify: `grep -rnE '(in this document|we will explore|it.s important to note|please remember|as you can see|needless to say|it is worth mentioning)' docs/`
 - [ ] No emojis in doc files
   - Verify: `grep -rP '[\x{1F300}-\x{1F9FF}]' docs/` (rough emoji range check)
 - [ ] Every doc file has a "How to Update" or "Find It Fast" section at the end
@@ -150,7 +151,7 @@ Violations:
 ### Checklist
 
 - [ ] Every Mermaid code block has valid syntax
-  - Verify: paste into mermaid.live or use a Mermaid CLI validator
+  - Verify (pick one): (a) check for common errors — unmatched brackets, missing arrows (`-->` or `->>`), unclosed quotes; (b) if `mmdc` CLI is available, run `mmdc -i <file> -o /dev/null`; (c) as last resort, visual scan for valid graph direction (`graph TD`/`LR`), balanced braces, and matching node references
 - [ ] Every node/participant in diagrams corresponds to a real directory, service, or component
 - [ ] Diagram direction (TD, LR, etc.) is appropriate for the content
 - [ ] Entity names match the actual code (no outdated names)

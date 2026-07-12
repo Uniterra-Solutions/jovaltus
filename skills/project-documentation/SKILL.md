@@ -1,321 +1,192 @@
 ---
 name: project-documentation
 description: >-
-  Complete project documentation generator. Reads the entire codebase and
-  creates a comprehensive docs/ tree: architecture with Mermaid diagrams,
-  per-module deep dives, API reference, conventions, data models, setup guide,
-  testing guide, and workflow recipes. Follows community best practices
-  (CodeWiki, DocAgent, codedocs, agentic-docs): agent-first writing, tables
-  over prose, one-home-per-fact, structured lookup maps, incremental update
-  support, and verification auditing.
-
-  LOAD when:
-  - User asks to "document this project", "generate docs", "create project documentation"
-  - User says "write comprehensive docs for this codebase"
-  - User wants to onboard new team members and needs architecture / module docs
-  - User asks "explain how this project works" or "what does this codebase do"
-  - User wants to refresh or update existing docs after code changes
-
-  DO NOT load when:
-  - User asks for a single-file README.md update (use a general approach)
-  - User asks about AGENTS.md or CLAUDE.md specifically (use manage-agents-md skill)
-  - User wants a one-line project description or quick summary
-  - The project is a trivial single-file script
-
+  Generates a multi-file docs/ tree from a codebase: architecture diagrams,
+  per-module deep dives, API reference, conventions, data models, setup,
+  testing, and workflow recipes. Supports incremental updates via git diff.
+  Prefer this for full-project documentation suites. Do NOT use for
+  single-file README updates, one-line project summaries, standalone
+  AGENTS.md/CLAUDE.md generation, or trivial single-file scripts.
 author: LaiTszKin
 version: 0.1.0
 metadata:
   jovaltus:
-    tags: [documentation, codebase-analysis, architecture, onboarding, agent-context]
+    tags: [documentation, codebase-analysis, architecture, onboarding]
 ---
-
-# Project Documentation Generator
 
 ## Goal
 
-Generate a comprehensive, structured `docs/` tree from any codebase by following
-a disciplined 4-phase workflow. The output is agent-first documentation —
-optimised for AI coding agents to consume, while remaining readable for humans.
-Every fact has exactly one home, every diagram matches the code, and every
-cross-reference resolves.
+Transform any codebase into a structured `docs/` tree where every fact has
+exactly one home, every diagram matches the code, and every cross-reference
+resolves. Output is agent-first — tables over prose, structural maps over
+narrative. Downstream agents read these docs instead of re-grepping the repo.
 
 ## Acceptance Criteria
 
-- Tech stack auto-detected from config files (pyproject.toml, package.json, Cargo.toml, etc.)
-- Complete `docs/` tree generated covering architecture, modules, API, conventions, data, setup, testing, workflows
-- Mermaid architecture diagrams included (at minimum: system context + container view)
-- All cross-references within `docs/` resolve (no broken links)
-- Agent-first writing style: tables over prose, entries ≤ 5 lines or linked to source
-- Incremental update mode: detect changed files via `git diff`, update only affected docs
-- Verification audit passes: coverage check, link check, freshness check
+- Tech stack auto-detected and verified against actual imports
+- Complete `docs/` tree: architecture, modules, API, conventions, data, setup, testing, workflows
+- Mermaid diagrams (C4 context + container minimum) match current code
+- All cross-references resolve; hub README indexes every file
+- Incremental mode (when git available): `git diff` → update only affected docs
+- Verification audit passes: coverage, links, freshness, quality, diagrams
+
+## Pre-Flight
+
+Before starting any phase, check these preconditions:
+
+1. **Verify skill files exist.** Confirm `references/*.md` and `templates/*.tmpl`
+   are present. If any are missing, report the gap and abort — do not guess formats.
+2. **Check git availability.** Run `git rev-parse --is-inside-work-tree 2>/dev/null`.
+   If git is unavailable or the project is not a repo: disable incremental mode,
+   freshness audit, and `git diff`-based operations. Fall back to full generation.
+3. **Detect existing docs/ format.** If `docs/` exists, check for format markers:
+   - Our format: `docs/README.md` with a "Document Index" or "I want to..." table
+   - Incompatible format: `conf.py`, `index.rst` (Sphinx), `mkdocs.yml`, `docusaurus.config.js`
+   - Unknown: none of the above
+   
+   Decision: our format → incremental update. Incompatible/unknown → warn the user,
+   offer `docs-agent/` as an alternative output directory. Never silently mix formats.
+4. **Choose workflow path.** If `docs/` exists and is our format → Incremental
+   Update. Otherwise → full 4-phase workflow below.
 
 ## Core Principles
 
-- **Agent-first writing.** Write for AI agents first, humans second. Tables over
-  prose. Structural maps over narrative. Direct, imperative voice. No fluff.
-- **One home per fact.** Each concept, module, endpoint, or pattern lives in exactly
-  one file. Cross-reference with relative links — never duplicate.
-- **Diagrams verify the text.** Every architecture diagram (Mermaid) must match
-  the code it describes. If the code changes, the diagram changes in the same commit.
-- **Docs are code artefacts.** Docs live in the repo, go through the same quality
-  gates, and ship with the code they describe. No separate wiki rot.
-- **Incremental over wholesale.** When code changes, update only the affected
-  doc sections — never regenerate the entire tree from scratch unless explicitly
-  asked.
-
----
+1. **One home per fact.** Cross-reference, never duplicate. If a fact appears in two files, pick one and link.
+2. **Verify config against imports.** A `pyproject.toml` listing both Flask and FastAPI needs source-level confirmation — never trust manifests alone.
+3. **Agent-first, not human-first.** Tables, structural maps, imperative voice, ≤5-line entries. No introductions, no fluff, no emojis.
+4. **Incremental when possible.** When docs exist (our format + git available), update only affected sections. Full regeneration is a last resort.
+5. **Diagrams ship with code.** Every Mermaid diagram updates in the same commit as the structural change it reflects.
 
 ## Workflow
 
-### Phase 1: SCAN — Build the Project Inventory
+Skip to [Incremental Update](#incremental-update) if pre-flight chose that path.
 
-**Goal:** Understand what the project IS before reading any code in detail.
+### Phase 1: SCAN — Inventory
 
-Read these files in order (they exist in every well-structured project):
+Read config files, entry points, and directory tree (top 2 levels from repo root).
+Detect the tech stack using `references/tech-stack-detection.md`.
 
-1. **Package manifest** — `pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`,
-   `Gemfile`, `composer.json`, `pom.xml`, `build.gradle`, `mix.exs` — whichever exists.
-   Extract: project name, version, language, build system, key dependencies.
+> **Fallback: no config files.** If no standard config is found (no pyproject.toml,
+> package.json, etc.), detect the language via shebangs, file extensions, and
+> directory heuristics. Generate a minimal `tech-stack.md` with `[INFERRED]` on
+> every row. For unparseable projects, reduce the document set: skip
+> `api-reference.md` and `data-models.md` if no APIs or models are detected.
 
-2. **Entry points** — `main.py`, `app.py`, `index.ts`, `src/main.rs`, `cmd/` —
-   find where the application starts.
+Produce a structured inventory (in memory) covering: tech stack, module
+boundaries, external dependencies (packages + services + infrastructure),
+config surface, and existing docs coverage.
 
-3. **Directory tree** — Top 2 levels of the source tree. Identify logical module
-   boundaries (groups of related files in directories).
+### Phase 2: ANALYZE — Deep Read
 
-4. **Config files** — `.env.example`, `docker-compose.yml`, `Dockerfile`,
-   `Makefile`, CI configs. Extract: environment vars, services, deployment shape.
+A **module** is a top-level source directory containing ≥2 files with business
+logic, OR a logical domain concept (auth, users, payments) that spans files.
+In flat projects with no clear boundaries, collapse all modules into a single
+`docs/modules/overview.md` with a per-file table.
 
-5. **Test config** — `pytest.ini`, `jest.config.js`, `vitest.config.ts`,
-   `.rspec`, test directory layout. Extract: test framework, runner command, patterns.
+For each module: extract public API (exported names — in Python, names without
+leading underscore, or `__all__` if present), trace imports (outbound via
+`grep -rn '^from|^import'` + inbound via `grep -rl 'from <module>'` → build
+a dependency graph), capture recurring patterns that differ from language defaults,
+and note architectural decisions. Flag any rationale not explicitly documented
+in ADRs, comments, or commit messages as `[INFERRED]`.
 
-6. **Lint/format config** — `ruff.toml`, `.eslintrc`, `.prettierrc`, `clippy.toml`.
-   Extract: style conventions enforced by tooling.
+> **Gotcha:** Never present an inferred rationale as fact. `[INFERRED]` is
+> mandatory when the actual decision reason isn't documented. If ALL decisions
+> are inferred, the architecture decisions table should note this explicitly.
 
-7. **Existing docs** — `README.md`, `CONTRIBUTING.md`, `AGENTS.md`, `CLAUDE.md`,
-   `docs/` directory. Extract: what's already documented, what's missing.
+### Phase 3: GENERATE — Write
 
-**Output:** A structured inventory document (kept in memory, not written to disk)
-listing: tech stack, module map, entry points, external dependencies, config
-surface, existing docs coverage, and a gap analysis.
+Generate files in **strict dependency order** (later files reference earlier ones):
 
-### Phase 2: ANALYZE — Deep-Read Key Modules
+| Order | File | Depends On |
+|-------|------|------------|
+| 1 | `tech-stack.md` | — |
+| 2 | `project-structure.md` | — |
+| 3 | `architecture.md` | tech-stack, project-structure |
+| 4 | `conventions.md` | — |
+| 5 | `modules/*.md` | project-structure, architecture |
+| 6 | `api-reference.md` | modules |
+| 7 | `data-models.md` | modules |
+| 8 | `setup.md` | tech-stack |
+| 9 | `testing.md` | tech-stack, conventions |
+| 10 | `workflows.md` | modules, conventions |
+| 11 | `README.md` | **everything — must be last** |
 
-**Goal:** Understand HOW the project works — dependencies, data flow, API surface.
+For each file's output contract, follow `references/document-types.md`.
+For writing conventions, follow `references/writing-style-guide.md`.
+Templates in `templates/` are structural guides — use them to understand the
+expected sections and table shapes, then write content from your analysis.
+Remove any section that doesn't apply to the project (e.g., skip "Pagination"
+if the API doesn't paginate). After generation, grep `docs/` for `{{` —
+any remaining placeholders are a bug.
 
-For each logical module identified in Phase 1:
+Skip document types that don't apply: no HTTP routes → skip `api-reference.md`;
+no database → skip `data-models.md`; no tests → note this in `testing.md`
+rather than skipping it.
 
-1. **Read the public surface** — exported functions, classes, routes, handlers.
-   For Python: `__all__`, public function signatures. For TypeScript: `export`
-   declarations. For Go: exported identifiers.
+> **Gotcha:** `docs/README.md` is the hub that indexes every other file.
+> Generating it before the indexed files exist produces broken links.
+> Always generate it LAST.
 
-2. **Trace imports/dependencies** — what does this module import? What imports
-   this module? Build a dependency graph.
+### Phase 4: VERIFY — Audit
 
-3. **Extract API contracts** — route definitions, request/response shapes,
-   error handling patterns, middleware/guards.
+Run the audit from `references/audit-checklist.md`: Coverage, Links, Freshness
+(when git available), Quality, Diagrams. Produce a composite report with
+PASS/FAIL per dimension. Every failure must include a concrete fix suggestion.
+Apply fixes for clear issues, then re-audit. Report issues you can't fix
+(missing external validation tools, destructive commands) as `[UNABLE TO VERIFY]`.
 
-4. **Identify data models** — ORM models, schemas, types, interfaces, database
-   migrations. Map entity relationships.
-
-5. **Capture patterns** — recurring code shapes: error handling, auth checks,
-   logging, configuration loading, async patterns, testing patterns.
-
-6. **Note architectural decisions** — why is module X separate from Y? Why was
-   library Z chosen? If the rationale is documented (ADRs, comments, commit
-   messages), capture it. If not, flag it as `[INFERRED]`.
-
-**Output:** Per-module analysis notes covering: purpose, public API, dependencies
-(inbound + outbound), data models, patterns used, and architectural notes.
-
-### Phase 3: GENERATE — Write the Documentation Tree
-
-**Goal:** Transform analysis into structured, agent-first documentation.
-
-Generate files in this dependency order (each file references earlier ones):
-
-#### 3.1 `docs/tech-stack.md`
-- Language (with version), runtime, package manager
-- Key frameworks and libraries (with versions)
-- Build system, test framework, linter/formatter
-- Infrastructure: database, cache, queue, external services
-- Table format: | Component | Version | Purpose |
-
-#### 3.2 `docs/project-structure.md`
-- Directory tree with 1-line responsibility per directory
-- Module boundary map: which dir maps to which logical module
-- Entry points and their roles
-- Table format: | Directory | Responsibility | Key Files |
-
-#### 3.3 `docs/architecture.md`
-- System context diagram (Mermaid C4 Context): user → system → external services
-- Container diagram (Mermaid C4 Container): web app, API, database, cache, queue
-- Data flow description: how a request travels through the system
-- Key architectural decisions (with rationale where known, `[INFERRED]` where guessed)
-- Deployment topology (if detectable from Docker/k8s configs)
-
-#### 3.4 `docs/conventions.md`
-- Naming conventions (files, variables, functions, classes)
-- Import ordering and organisation
-- Error handling patterns
-- Logging conventions
-- Configuration management
-- Testing conventions (file naming, fixture patterns, mock policy)
-- Code style (only rules that differ from language defaults)
-
-#### 3.5 `docs/modules/<name>.md` (one per module)
-- Module purpose (1 sentence)
-- Public API surface (functions, classes, routes — with signatures, not full bodies)
-- Dependencies: what it imports (inbound), what imports it (outbound)
-- Data models owned by this module
-- Key patterns or gotchas
-- Table format for API: | Function/Route | Signature | Description |
-
-#### 3.6 `docs/api-reference.md` (for HTTP/web projects)
-- Base URL, auth requirements
-- All endpoints grouped by resource
-- Table: | Method | Path | Auth | Request Body | Response | Description |
-
-#### 3.7 `docs/data-models.md`
-- Entity-relationship overview (Mermaid ER diagram)
-- Per-entity: fields, types, constraints, relationships
-- Database schema (tables, columns, indexes) if SQL
-- Migration strategy (if detectable)
-
-#### 3.8 `docs/setup.md`
-- Prerequisites (language versions, system deps)
-- Install command(s)
-- Environment configuration (.env vars with descriptions)
-- Database setup (migrations, seeds)
-- Run command(s) — dev server, build, etc.
-- Docker setup (if applicable)
-
-#### 3.9 `docs/testing.md`
-- Test framework and version
-- Run command for full suite + single file
-- Test directory layout and naming conventions
-- Fixture/factory patterns
-- Mock policy (what gets mocked, what doesn't)
-- Coverage expectations
-
-#### 3.10 `docs/workflows.md`
-- Common development tasks as step-by-step recipes:
-  - Adding a new API endpoint
-  - Adding a new database model
-  - Adding a new module
-  - Running specific test suites
-  - Deploying (if detectable)
-
-#### 3.11 `docs/README.md` (Hub — generate LAST)
-- Navigation table: | I want to... | Read... |
-- Document index: link to every file in docs/
-- Quick links: setup, architecture diagram, API reference
-- "What is this project?" (2-3 sentence summary)
-
-### Phase 4: VERIFY — Audit the Documentation
-
-**Goal:** Prove the documentation is complete, correct, and current.
-
-#### Coverage Check
-- Every top-level source directory has a corresponding `docs/modules/<name>.md`
-- Every public API function/route is documented
-- Every data model entity appears in `docs/data-models.md`
-- Flag uncovered areas in the audit report
-
-#### Link Check
-- Every cross-reference in `docs/` points to an existing file
-- Run: `grep -rohP '\[.*\]\(\./[^)]+\)' docs/ | sort | uniq` — verify each target exists
-
-#### Freshness Check
-- Are any doc sections clearly stale? (referencing deleted files, old API shapes)
-- Compare against git log: were there structural changes since the last doc update?
-- Flag stale sections with specific fix suggestions
-
-#### Quality Check
-- Writing style: no fluff words ("in this document we will explore..."), no emojis
-- Entry length: no prose paragraph exceeds 5 lines without a table or link
-- Agent utility: does each file answer the "I want to X → look here" question?
-
-#### Audit Report
-Output a structured report: Coverage (pass/fail + gaps), Links (pass/fail +
-broken refs), Freshness (pass/fail + stale sections), Quality (pass/fail +
-style violations). Each failure includes a concrete fix suggestion.
+> **Safety:** Never run install, Docker, or database commands during audit.
+> Check commands with `--help` or `--dry-run` first. The audit verifies
+> documentation correctness — it does not modify the running system.
 
 ---
 
-## Incremental Update Mode
+## Incremental Update
 
-When the user says "update the docs" or docs already exist:
+Run this workflow when `docs/` exists and is our format.
 
-1. **Detect changes:** `git diff --name-only <baseline>..HEAD` (or `git diff --name-only`
-   for uncommitted changes)
+1. `git diff --name-only <baseline>..HEAD` (or unstaged diff)
+2. Map changes to affected docs using the dependency graph from Phase 2:
+   - `src/<module>/` changed → `docs/modules/<module>.md`
+   - Data model changed → `docs/data-models.md`
+   - Route changed → `docs/api-reference.md`
+   - New/removed dependency → `docs/tech-stack.md`
+   - Directory restructured → `docs/project-structure.md`
+3. Update ONLY affected sections. Re-read changed source, update doc entries —
+   do not touch unrelated sections.
+4. Focused re-audit: links on updated files, freshness on changed modules.
 
-2. **Map changes to docs:** Use the dependency graph from Phase 2 to determine
-   which doc sections are affected:
-   - Changed `src/auth/` → update `docs/modules/auth.md`
-   - Changed data model → update `docs/data-models.md`
-   - Changed route definition → update `docs/api-reference.md`
-   - New dependency added → update `docs/tech-stack.md`
-   - Changed directory structure → update `docs/project-structure.md`
-
-3. **Update only affected sections.** Re-read the changed source files. Update
-   ONLY the doc sections that reference the changed code. Do NOT regenerate
-   untouched sections.
-
-4. **Re-verify** with a focused audit: link check on updated files, freshness
-   check on changed modules.
+**Without git:** fall back to full regeneration with `[UNABLE TO VERIFY — no git]`
+on all freshness checks.
 
 ---
 
-## Writing Style Rules
+## Gotchas
 
-See `references/writing-style-guide.md` for the full style guide. Core rules:
-
-| Rule | Bad | Good |
-|------|-----|------|
-| No introductions | "In this document, we will explore the architecture of..." | "## Architecture" |
-| Tables over prose | 3 paragraphs describing API endpoints | 3-column table: Method, Path, Description |
-| Short entries | 15-line prose description of a module | "Handles user auth (login, logout, token refresh)" |
-| Structural maps | Alphabetical file listing | "I want to add a route → `src/api/routes.ts`" |
-| No fluff | "It's important to note that..." | Just state the fact |
-| One home | Same fact in README.md AND architecture.md | Fact in architecture.md; README.md links to it |
-| Source links | "The auth module handles authentication" | "Auth module (`src/auth/index.ts:1-50`): JWT middleware + login/logout" |
-
----
-
-## Technology Detection
-
-See `references/tech-stack-detection.md` for the full detection matrix. Quick reference:
-
-| Config File | Language | Build/PM | Likely Framework |
-|-------------|----------|----------|------------------|
-| `pyproject.toml` | Python | uv / pip | FastAPI, Django, Flask |
-| `package.json` | TypeScript/JS | npm / yarn / pnpm | React, Next.js, Express |
-| `Cargo.toml` | Rust | cargo | Actix, Axum, Rocket |
-| `go.mod` | Go | go modules | gin, echo, chi |
-| `Gemfile` | Ruby | bundler | Rails, Sinatra |
-| `composer.json` | PHP | composer | Laravel, Symfony |
-| `pom.xml` / `build.gradle` | Java/Kotlin | Maven/Gradle | Spring Boot |
-
-Always verify framework claims by reading actual imports — never trust the
-config file alone. A `pyproject.toml` that lists both Flask and FastAPI needs
-source-level confirmation.
-
----
+- **Config ≠ truth.** Always verify framework claims by reading actual imports.
+  A manifest listing three web frameworks proves nothing about which one is used.
+- **Monorepo detection first.** Before assuming single-project layout, check for
+  workspace configs (`pnpm-workspace.yaml`, `workspaces` in `package.json`,
+  multiple `pyproject.toml` files). Monorepos need per-package `docs/`.
+- **Suppress human-first instincts.** The agent's default is human-friendly prose
+  (introductions, narrative, politeness). Actively suppress this. Every paragraph
+  over 5 lines without a table or list is a violation.
+- **`[INFERRED]` is mandatory.** Any architectural rationale, design intent, or
+  decision history not explicitly documented in the codebase must carry this tag.
+  Presenting inference as fact is the #1 documentation hallucination.
+- **Generation order is non-negotiable.** `README.md` last. Cross-references break
+  if you write the index before the indexed files exist.
+- **Never silently mix doc formats.** If `docs/` exists from another generator
+  (Sphinx, MkDocs, Docusaurus), don't merge. Offer `docs-agent/` as an alternative
+  or ask the user. Merging breaks both formats.
+- **Templates are guides, not fill-in-the-blank forms.** Use them to understand
+  what sections and table shapes each document needs. Write from analysis, not
+  by literal placeholder replacement. Remove inapplicable sections.
 
 ## References
 
-- `references/document-types.md` — Detailed specification for each document type
-- `references/tech-stack-detection.md` — Full technology detection matrix
-- `references/writing-style-guide.md` — Agent-first writing conventions with examples
-- `references/audit-checklist.md` — Complete verification audit checklist
-
----
-
-## Templates
-
-- `templates/architecture.md.tmpl` — Architecture doc with Mermaid stubs
-- `templates/module.md.tmpl` — Per-module documentation template
-- `templates/api-reference.md.tmpl` — API reference template
-- `templates/conventions.md.tmpl` — Conventions document template
-- `templates/hub-readme.md.tmpl` — docs/ hub navigation template
+- `references/document-types.md` — Output format contract for all 11 document types
+- `references/tech-stack-detection.md` — Detection matrices for 10 languages, databases, infrastructure
+- `references/writing-style-guide.md` — Agent-first writing rules (10 rules with bad/good examples)
+- `references/audit-checklist.md` — 5-dimension verification protocol with report formats
