@@ -1,5 +1,5 @@
 ---
-name: technical-design
+name: design
 description: >
   Dialectical technical design review and generation. Agent challenges
   every design decision with "why this and not something simpler?" Two
@@ -9,11 +9,11 @@ description: >
   LOAD when:
   - User says "let's design ..." or "review my design" or "技術設計"
   - User provides a design draft for review
-  - After requirements-discovery produces a PRD and user is ready for design
+  - After discuss produces a PRD and user is ready for design
   - User asks "what's the best architecture for ..."
   Do NOT use for:
   - Implementation, coding, debugging tasks
-  - Requirements gathering (use requirements-discovery)
+  - Requirements gathering (use discuss)
   - Code review of existing implementation
   - Choosing between two libraries (that's a spike/research task)
 author: LaiTszKin
@@ -61,7 +61,7 @@ unless there's a concrete, planned requirement.
 
 **PRD is the anchor.** Every design decision traces back to a PRD requirement.
 If a design element doesn't serve a requirement, it's out of scope. If the PRD
-is missing, direct the user to requirements-discovery first.
+is missing, direct the user to discuss first.
 
 **Concrete over abstract.** "Use a message queue" is not a design decision.
 "Use Redis Streams for the notification pipeline; producer writes to stream
@@ -98,7 +98,7 @@ User provides a design document or draft. Agent reviews it dialectically.
 User has a PRD but no design draft. Agent designs from scratch.
 
 1. **Read the PRD.** It must exist at `.plan/<DD-MM-YYYY>/<name>/prd.md`.
-   If not found, ask the user to run requirements-discovery first.
+   If not found, ask the user to run discuss first.
 2. **Discover preferences.** Ask the user about constraints and preferences:
    - Required tech stack or languages (if any)
    - Existing systems to integrate with
@@ -225,7 +225,7 @@ structure with `{{placeholder}}` tokens. Fill from the confirmed design.
 ## Gotchas
 
 - **No PRD, no design.** If the PRD doesn't exist at the expected path, stop
-  and direct the user to requirements-discovery. Designing without a PRD leads
+  and direct the user to discuss. Designing without a PRD leads
   to scope creep and misalignment.
 - **"We might need it later" is not a requirement.** If a design element
   exists only for speculative future needs, challenge it. Replace with an

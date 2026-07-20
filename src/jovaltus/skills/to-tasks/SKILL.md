@@ -1,5 +1,5 @@
 ---
-name: task-orchestration
+name: to-tasks
 description: >
   Decomposes implementation specs into a DAG of atomic, self-contained
   task files for parallel subagent execution. Each task file bundles its
@@ -12,7 +12,7 @@ description: >
   - User asks to prepare subagent work packages
   - User mentions parallel execution, worktree isolation, or task DAG
   Do NOT use for:
-  - Writing specs (use implementation-spec)
+  - Writing specs (use to-spec)
   - Writing code directly
   - Single-agent sequential workflows
   - Tasks where every step depends on the previous one (no parallelism)

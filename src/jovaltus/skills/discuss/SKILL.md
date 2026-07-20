@@ -1,5 +1,5 @@
 ---
-name: requirements-discovery
+name: discuss
 description: >
   Interactive requirements elicitation through adaptive questioning.
   Agent starts from high-level direction, drills into detail based on

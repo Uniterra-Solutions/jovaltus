@@ -1,5 +1,5 @@
 ---
-name: implementation-spec
+name: to-spec
 description: >
   Translates PRD and technical design into agent-executable implementation
   specs. Each spec is a self-contained task with concrete stack, exact
@@ -11,8 +11,8 @@ description: >
   - User says "write the spec" or "break this into tasks" or "implementation spec"
   - User asks for executable task breakdown from existing PRD + design
   Do NOT use for:
-  - Requirements gathering or PRD writing (use requirements-discovery)
-  - Technical design or architecture decisions (use technical-design)
+  - Requirements gathering or PRD writing (use discuss)
+  - Technical design or architecture decisions (use design)
   - Writing code directly — this produces specs, not code
   - Tasks without a design doc to reference
 author: LaiTszKin
@@ -76,8 +76,8 @@ Before starting, verify:
 2. Design doc exists at `.plan/<DD-MM-YYYY>/<name>/design.md`
 
 If either is missing, redirect the user to the appropriate skill:
-- Missing PRD → `requirements-discovery`
-- Missing design → `technical-design`
+- Missing PRD → `discuss`
+- Missing design → `design`
 
 ## The SCOPE Model for Implementation Specs
 
