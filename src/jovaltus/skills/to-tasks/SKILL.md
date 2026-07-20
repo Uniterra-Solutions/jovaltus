@@ -1,11 +1,13 @@
 ---
 name: to-tasks
 description: >
-  Decomposes implementation specs into a DAG of atomic, self-contained
-  task files for parallel subagent execution. Each task file bundles its
-  spec, design excerpts, project rules, and verification — zero external
-  dependencies. Designed for git worktree isolation. Produces a manifest
-  and per-task files under .plan/<DD-MM-YYYY>/<name>/tasks/.
+  Decomposes implementation specs into a set of fully independent,
+  self-contained task files for parallel execution. Every task has
+  zero shared write files — all tasks can run simultaneously. Any
+  cross-task dependencies (API shapes, function signatures) are
+  inlined as interface contracts so subagents need only their own
+  TASK.md. Produces a flat manifest and per-task files under
+  .plan/<DD-MM-YYYY>/<name>/tasks/.
   LOAD when:
   - Implementation specs exist and user is ready to orchestrate execution
   - User says "break into tasks" or "create task list" or "orchestrate"
@@ -14,73 +16,78 @@ description: >
   Do NOT use for:
   - Writing specs (use to-spec)
   - Writing code directly
-  - Single-agent sequential workflows
-  - Tasks where every step depends on the previous one (no parallelism)
+  - Tasks where file-level independence is impossible
 author: LaiTszKin
-version: 0.1.0
+version: 0.2.0
 metadata:
   jovaltus:
-    tags: [orchestration, tasks, subagent, parallel, worktree, dag]
+    tags: [orchestration, tasks, subagent, parallel, worktree, independent]
 ---
 
-# Task Orchestration
+# To Tasks
 
 ## Goal
 
-Decompose implementation specs into a DAG of atomic, fully self-contained
-task files. Each task file is a complete work package that a subagent can
-execute in isolation — zero external file reads needed beyond the task
-file itself.
+Decompose implementation specs into a flat set of fully independent,
+self-contained task files. Every task owns a disjoint set of files —
+zero shared write targets. All tasks can run simultaneously in parallel
+worktrees with no merge conflicts.
 
-Designed for git worktree isolation: each subagent checks out a single
-task file with its own worktree, reads exactly that file, and implements.
+Cross-task dependencies (e.g., "T3 needs to call T1's API") are resolved
+at spec time by inlining the interface contract into every task that
+needs it. No task waits for another task's output.
 
-The output is a manifest + per-task files under
+The output is a flat manifest + per-task files under
 `.plan/<DD-MM-YYYY>/<name>/tasks/`.
 
 ## Acceptance Criteria
 
 - Every task file is fully self-contained — a subagent reading ONLY that
-  file (no other project files, no shared references) has all the context
-  it needs to implement
-- Every task file includes: full spec inline, relevant design excerpts,
-  project rules, exact file ownership, verification command
-- DAG is correct: no missing dependencies, no false dependencies, no cycles
-- File ownership has zero conflicts within the same wave (no two tasks
-  in the same wave edit the same file)
-- Each task produces at least one verifiable output artifact (file, test
-  pass, endpoint response)
-- Manifest clearly shows execution waves and dependency edges
+  file has all the context it needs to implement
+- Zero file write conflicts across ALL tasks — every file is owned by
+  exactly one task (CREATE or EDIT, never both)
+- Cross-task interface contracts (API shapes, function signatures, data
+  types) are inlined into every consuming task
+- Every task includes its exact file ownership, verification command,
+  and inline spec + design excerpts + project rules
+- Manifest is a flat task inventory — no waves, no ordering, just a list
+  of independent work packages with worktree paths
 
 ## Core Principles
 
+**Flat, not DAG.** The dependency graph is informational — it shows
+logical relationships between tasks. But execution is flat: all tasks
+run in parallel because they share zero files. The DAG helps humans
+understand the system design; it does not constrain execution order.
+
+**Interface contract over file dependency.** When Task A needs to call
+a function that Task B creates, Task A's TASK.md inlines the function
+signature and expected behavior. Task A codes against the contract, not
+against Task B's actual output. This is the same principle as programming
+to an interface — the contract is the shared truth.
+
+**File-level atomicity is mandatory.** Two tasks must never touch the
+same file. If two specs require editing the same file, re-split the
+work: either merge the specs into one task, or find a way to separate
+the file changes into two disjoint files.
+
 **Self-contained or don't ship.** A task file that requires the subagent to
-read another file defeats the purpose. The subagent's context should be exactly
-the task file — nothing else. This enables git worktree isolation where each
-subagent works in a directory containing only its task file and the code it
-produces.
-
-**File-level atomicity.** Two tasks in the same wave must never touch the same
-file. If two specs require editing the same file, they must be sequential
-(wave N → wave N+1), or one task must be split differently.
-
-**DAG over list.** Tasks form a directed acyclic graph, not a flat list.
-Parallelism comes from the graph structure: nodes with no shared dependencies
-can execute in the same wave. The DAG makes parallelism explicit and verifiable.
+read another file defeats the purpose. The subagent's context is exactly
+the task file — nothing else. This enables git worktree isolation.
 
 **Inline everything.** Each task file bundles:
 - Its spec (full inline copy from the specs/ directory)
-- Relevant design excerpts (only the parts that task needs — schema, conventions)
+- Relevant design excerpts (only the parts that task needs)
+- Interface contracts from other tasks (function signatures, types, API shapes)
 - Project rules (boundaries, conventions from AGENTS.md or equivalent)
-- Dependency info (which task's output is this task's input)
 - Output declaration (what files/artifacts this task produces)
 
 This duplication is intentional — it buys context isolation. Token cost of
 duplication is cheaper than the coordination cost of shared references.
 
-**3-5 tasks per wave is the sweet spot.** Anthropic's research and the
-Totalum 2026 playbook both find this range optimal. More than 5 concurrent
-subagents and the orchestrator spends more time merging than it saves.
+**All tasks = one wave.** 3-5 tasks is the sweet spot from research. Since
+all tasks are independent, this is also the natural batch size for
+parallel dispatch.
 
 ## Prerequisites
 
@@ -91,73 +98,93 @@ Before starting, verify:
 
 ## Workflow
 
-### Phase 1: Analyze Dependencies
+### Phase 1: Analyze File Ownership
 
 1. Read all spec files from `.plan/<DD-MM-YYYY>/<name>/specs/`.
 2. For each spec, identify:
    - What files it creates or edits
-   - What existing files it reads
-   - What artifacts it produces that other specs might depend on
-3. Build the dependency graph:
-   - Spec A depends on Spec B if A needs files or artifacts B produces
-   - Two specs are independent if they touch disjoint files AND neither
-     needs the other's output
+   - What shared types, functions, or APIs it exposes
+   - What other specs might need from it (interface contracts)
+3. Build a file ownership map. Every file path appears in exactly one
+   spec. If a file appears in two specs, re-split until ownership is
+   exclusive.
 
-### Phase 2: Assign Waves
+### Phase 2: Extract Interface Contracts
 
-4. Apply topological sort to the DAG to determine execution waves.
-5. Wave 1 = all tasks with zero incoming dependencies.
-6. Wave N = all tasks whose dependencies are fully satisfied by waves 1..N-1.
-7. Validate: no two tasks in the same wave share a write target file.
-   If they do, split or sequentialize.
+4. For each spec, identify its public surface — what other tasks need to
+   know about this task's output:
+   - Function signatures and docstrings
+   - Class / type definitions
+   - API endpoint shapes (method, path, request/response schema)
+   - Database table schemas this task creates
+   - Config keys or environment variables this task introduces
+5. Build a contract map: each contract belongs to one producing task.
 
-### Phase 3: Build Task Files
+### Phase 3: Assign File Ownership
 
-For each task in the DAG:
+6. Validate: no two specs share a write target. If they do, resolve before
+   proceeding — split differently, or merge specs.
+7. For each spec that needs to EDIT an existing file (brownfield), note it.
+   Only one spec edits any given file.
+
+### Phase 4: Build Task Files
+
+For each spec in the flat list:
 
 8. Load `assets/task-template.md` for structure.
 9. Fill every section:
-   - **Dependency**: list predecessor task IDs + exact files/artifacts needed
-   - **Output**: exact files and test commands this task produces
+   - **File Ownership**: exact list of CREATE and EDIT files. Zero overlap
+     with any other task.
+   - **Interface Contracts from Others**: for every other task whose output
+     this task needs, inline the function signature, type definition, or API
+     shape. The subagent codes against these contracts.
+   - **Interface Contract Exported**: what this task produces that other
+     tasks will consume. Used by the orchestrator to extract contracts for
+     dependent tasks.
    - **Spec**: copy the full spec inline — do not reference, do not link
-   - **Design Excerpts**: extract only relevant parts from design.md:
-     - Data model tables/columns this task touches
-     - API conventions (response format, error format, auth mechanism)
-     - Tech stack versions this task uses
+   - **Design Excerpts**: extract only relevant parts from design.md
    - **Project Rules**: inline the relevant boundaries from the project's
-     conventions file (Always / Ask / Never)
-   - **Verification**: exact command that proves this task is done
+     conventions file
+   - **Verification**: exact command that proves this task is done,
+     functional in isolation (should not require other tasks' output to pass)
 
 10. Each task file must pass the self-containment test: "Can a subagent with
     ONLY this file implement the task correctly?"
 
-### Phase 4: Write Manifest
+### Phase 5: Build Dependency Graph (Informational)
 
-11. Load `assets/manifest-template.md` for structure.
-12. Fill the manifest with:
-    - **Execution Order**: ASCII art showing wave structure and parallelism
-    - **Wave Breakdown**: per-wave tables — task IDs, slugs, worktree paths,
-      dependencies, verification commands. Each wave explicitly marks which
-      tasks run in parallel.
-    - **File write map**: per-wave table showing which task writes which files,
-      proving zero conflicts within the wave.
-    - **Dependency Graph**: ASCII art DAG showing all dependency edges.
-    - **Task Inventory**: master table with every task's wave, worktree path,
-      branch name, and task file path. This is the machine-readable index
-      that the `execute` skill reads to dispatch workers.
+11. Create a dependency graph showing which tasks logically depend on which:
+    - T1 produces `src/auth/jwt.py` → T3 needs JWT shapes to build middleware
+    - T2 produces `src/models/user.py` → T1, T3 both need the User model
+    - The graph is **purely informational** — it helps understand the system
+      design. It does NOT constrain execution order because every task that
+      needs something from another task already has it inlined as a contract.
+
+### Phase 6: Write Manifest
+
+12. Load `assets/manifest-template.md` for structure.
+13. Fill the manifest with:
+    - **Task Inventory**: flat table — every task's ID, slug, file ownership,
+      worktree path, branch name, verification command. This is the
+      machine-readable index that `to-environment` and `execute` read.
+    - **File Ownership Map**: which task owns every file. Proves zero overlap.
+    - **Interface Contract Map**: which task exports which contracts, and
+      which tasks consume them. Proves every dependency is covered by an
+      inlined contract.
+    - **Dependency Graph**: informational ASCII art DAG.
     - **Execution Status**: status table pre-filled with ⬜ pending. The
-      `execute` skill updates this table as tasks progress.
+      `execute` skill updates this table.
 
-### Phase 5: Validate
+### Phase 7: Validate
 
-12. Cross-task validation:
-    - No missing dependency edges
-    - No cycles in the DAG
-    - No file write conflicts within any wave
-    - Every spec from specs/ is covered by exactly one task
+14. Cross-task validation:
+    - Every file in the project touched by any spec belongs to exactly one task
+    - Every cross-task interface dependency has a contract inlined in the
+      consuming task's TASK.md
     - Every task passes the self-containment test
+    - Every spec from specs/ is covered by exactly one task
 
-13. Present the manifest and ask for user confirmation.
+15. Present the manifest and ask for user confirmation.
 
 ## Document Output
 
@@ -165,48 +192,40 @@ For each task in the DAG:
 
 ```
 .plan/<DD-MM-YYYY>/<name>/tasks/
-├── manifest.md            # DAG + waves + execution overview
+├── manifest.md              # Flat task inventory + status table
 ├── task-{{id}}-{{slug}}.md  # Self-contained task file
 ├── task-{{id}}-{{slug}}.md
 └── ...
 ```
 
-No `shared/` directory. Every task file is self-contained.
-
-### Template
-
-Load `assets/task-template.md` for each task file. The template uses
-`{{placeholder}}` tokens. Fill completely — no blanks, no references
-to external files.
+No `shared/` directory. No waves. Every task file is self-contained.
 
 ## Gotchas
 
-- **Duplication is a feature, not a bug.** Copying the same schema excerpt
-  into 4 task files costs tokens but buys perfect isolation. The subagent
-  never context-switches to find information. This is the right trade-off
-  for worktree-based execution.
+- **Interface contracts are promises, not guarantees.** Task A inlines
+  "Task B will create `src/auth/jwt.py` with function `create_token(user_id) -> str`."
+  If Task B produces a different signature, the integration test (which
+  reads real code, not contracts) will catch it. Contracts reduce but
+  don't eliminate integration risk.
 - **File conflicts are the #1 failure mode.** Two subagents editing the
-  same file in parallel = guaranteed merge conflict. The DAG must prevent
-  this. Check every file write assignment before finalizing waves.
-- **"Read" doesn't mean "read the file."** When a task says "READ:
-  src/models/user.py" in its file ownership, the subagent should read it
-  from the ACTUAL repository during execution — not from the task file.
-  Design excerpts in the task file are supplementary context, not
-  replacement for reading the real code.
+  same file = guaranteed merge conflict. The file ownership map must be
+  proven disjoint before task files are written.
+- **"Read" is for brownfield context, not dependency.** When a task
+  marks a file as READ, it means the subagent reads the existing code
+  for understanding. READ files are included in the worktree by
+  `to-environment`. READ is never a substitute for inlined contracts.
 - **Don't over-decompose.** Each task should be a meaningful unit of work
   (15-30 min for a subagent). Splitting a 15-min task into three 5-min
   tasks adds orchestration overhead with no parallelism gain.
-- **Task files are the artifact, not the manifest.** The manifest is an
-  index for the human orchestrator. The task files are what subagents
-  actually read. Spend effort on task file quality, not manifest polish.
-- **Verification must be self-contained too.** The command in the task
-  file must work from a clean checkout of the worktree. If it requires
-  pre-existing state (database, env vars), document that in the task file.
+- **Verification must work in isolation.** The verification command
+  must pass without other tasks' code existing. If the test imports
+  `src/auth/jwt.py` but that file is owned by T2 and doesn't exist yet,
+  either inline a stub or restructure the test to be self-contained.
 
 ## References
 
 - `assets/task-template.md` — Self-contained task file structure with
-  `{{placeholder}}` tokens. Load during Phase 3 for each task.
-- `assets/manifest-template.md` — Structured manifest with wave ordering,
-  parallelism declaration, worktree paths, and execution status table.
-  Load during Phase 4.
+  `{{placeholder}}` tokens. Load during Phase 4 for each task.
+- `assets/manifest-template.md` — Flat task inventory with file ownership
+  map, interface contract map, dependency graph, and execution status
+  table. Load during Phase 6.
