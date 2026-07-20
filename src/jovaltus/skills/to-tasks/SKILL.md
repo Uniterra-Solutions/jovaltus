@@ -133,11 +133,20 @@ For each task in the DAG:
 
 ### Phase 4: Write Manifest
 
-11. Create `manifest.md` with:
-    - DAG visualization (ASCII art)
-    - Wave breakdown with task IDs and descriptions
-    - Per-task: file path, input dependencies, output artifacts
-    - Execution order recommendation (which tasks can run in parallel)
+11. Load `assets/manifest-template.md` for structure.
+12. Fill the manifest with:
+    - **Execution Order**: ASCII art showing wave structure and parallelism
+    - **Wave Breakdown**: per-wave tables — task IDs, slugs, worktree paths,
+      dependencies, verification commands. Each wave explicitly marks which
+      tasks run in parallel.
+    - **File write map**: per-wave table showing which task writes which files,
+      proving zero conflicts within the wave.
+    - **Dependency Graph**: ASCII art DAG showing all dependency edges.
+    - **Task Inventory**: master table with every task's wave, worktree path,
+      branch name, and task file path. This is the machine-readable index
+      that the `execute` skill reads to dispatch workers.
+    - **Execution Status**: status table pre-filled with ⬜ pending. The
+      `execute` skill updates this table as tasks progress.
 
 ### Phase 5: Validate
 
@@ -198,3 +207,6 @@ to external files.
 
 - `assets/task-template.md` — Self-contained task file structure with
   `{{placeholder}}` tokens. Load during Phase 3 for each task.
+- `assets/manifest-template.md` — Structured manifest with wave ordering,
+  parallelism declaration, worktree paths, and execution status table.
+  Load during Phase 4.
