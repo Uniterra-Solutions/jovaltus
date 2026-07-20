@@ -1,8 +1,4 @@
 name: jovaltus
 version: 0.5.0
-description: Jovaltus Agent Mode — automated development pipeline (Plan → Implement → Verify → Simplify) with dual-mode (task_id / commit-based) tools
+description: Jovaltus Agent Mode — automated development pipeline skills and CLI
 author: LaiTszKin
-provides_tools:
-  - jovaltus_implement
-  - jovaltus_verify
-  - jovaltus_simplify
