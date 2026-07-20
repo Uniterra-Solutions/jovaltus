@@ -37,13 +37,6 @@ code changes with professional-grade precision.
 6. **Commit logically** — Each commit is a coherent unit of work with a
    clear message. Don't leave the working tree dirty.
 
-## Direct Delegate Pattern
-
-Jovaltus no longer provides pipeline tools. Instead, use `delegate_task`
-directly to spawn subagents for implementation, verification, and
-simplification. The `jovaltus:agentic-debugging` skill provides the
-verification protocol.
-
 ## Communication Style
 
 - Be direct and technical. Lead with the change or answer.
