@@ -2,26 +2,6 @@
 
 Step-by-step recipes for common development tasks.
 
-## Adding a New Pipeline Tool
-
-1. Add schema to `src/jovaltus/schemas.py` (e.g., `BENCHMARK_SCHEMA`)
-2. Create handler factory in `src/jovaltus/tools.py` (e.g., `make_benchmark_handler`)
-3. Write subagent prompt in `src/jovaltus/prompts/benchmark.md`
-4. Register in `src/jovaltus/__init__.py` `register()`: `ctx.register_tool(...)`
-5. Add to `src/jovaltus/plugin.yaml` `provides_tools` list
-6. Add tests in `tests/test_benchmark.py`
-7. Update `docs/modules/tool-handlers.md` Public API table
-
-## Adding a New Pipeline Stage
-
-1. Add to `state.STAGE_ORDER` list
-2. Add transitions to `state._VALID_TRANSITIONS` and `state._NEXT_STAGE`
-3. Add stage labels and hints to `hooks._STAGE_LABELS` and `hooks._STAGE_HINTS`
-4. Update stage validation in all handler factories that gate on stages
-5. Add tests in `tests/test_state.py`
-6. Update `docs/modules/pipeline-state.md` Stage Machine Rules table
-7. Update `docs/architecture.md` Pipeline Stage Machine diagram
-
 ## Adding a Bundled Skill
 
 1. Create directory `src/jovaltus/skills/<skill-name>/`
@@ -29,7 +9,8 @@ Step-by-step recipes for common development tasks.
    ```yaml
    ---
    name: <skill-name>
-   description: ...
+   description: >-
+     ... (must include LOAD/Do NOT use triggers)
    author: LaiTszKin
    version: 0.1.0
    metadata:
@@ -37,41 +18,30 @@ Step-by-step recipes for common development tasks.
        tags: [...]
    ---
    ```
-3. Add supporting files under `references/`, `templates/`, `scripts/` as needed
-4. Fabricium auto-discovers skills — no manual registration
+3. Add supporting files under `references/`, `assets/`, `templates/` as needed
+4. Fabricium auto-discovers skills — no manual registration required
+5. Add tests if the skill introduces new CLI or sync behavior
+6. Update `docs/architecture.md` Phase Details table
 
-## Running the Full Pipeline (End-to-End)
+## Running the Full Pipeline
 
-1. Confirm requirements with user (Phase 0)
-2. `jovaltus_implement(plan="<requirements>")` → implement subagent
-3. Wait for subagent report → review changes
-4. `jovaltus_verify(task_id="<id>")` → verify subagent (Three-Layer Protocol)
-5. Wait for composite verification report
-6. If ALL-PASS → `jovaltus_simplify(task_id="<id>")` → simplify subagent
-7. Wait for simplification report
-
-## Running Verify/Simplify in Commit Mode
-
-```bash
-# Verify changes since a commit
-jovaltus_verify(before="<commit-hash>")
-
-# Verify an exact range
-jovaltus_verify(before="<hash1>", after="<hash2>")
-
-# Simplify changes since a commit
-jovaltus_simplify(before="<commit-hash>")
-```
-
-No task_id needed. No pipeline state tracking.
+1. Start Hermes: `hermes -p jovaltus-agent`
+2. Load `discuss` skill → elicit requirements → produce `prd.md`
+3. Load `design` skill → challenge every decision → produce `design.md`
+4. Load `to-spec` skill → translate to implementation specs
+5. Load `to-tasks` skill → decompose into flat, independent tasks
+6. Load `to-environment` skill → create isolated worktrees
+7. Load `execute` skill → dispatch subagents in parallel
+8. Load `review` skill → adversarial review per worktree → merge
+9. Load `qa` skill → PRD-driven acceptance testing
 
 ## Running Tests During Development
 
 ```bash
-# Quick: just unit tests
+# Quick: unit tests only (no integration, no evals)
 uv run pytest tests/ -v --ignore=tests/integration --ignore=tests/evals
 
-# All tests including integration
+# Unit + integration (no Docker needed)
 uv run pytest -v --ignore=tests/evals
 
 # Eval tests (need Docker + API keys)
@@ -103,15 +73,20 @@ git commit --no-verify -m "..."
 1. Bump version in `pyproject.toml` `[project] version`
 2. Bump version in `src/jovaltus/plugin.yaml` `version`
 3. If skills changed, bump their version in respective `SKILL.md` files
-4. Update release notes
+4. Update `CHANGELOG.md`
 5. Tag: `git tag v<version> && git push --tags` (triggers PyPI trusted publisher)
 
-## Debugging Subagent Behavior
+## Editing a Skill
 
-1. Edit prompt in `src/jovaltus/prompts/<phase>.md`
-2. Restart Hermes to reload prompts (loaded at handler creation time)
-3. Run pipeline with a small test task
-4. Check subagent report for unexpected behavior
+1. Edit `src/jovaltus/skills/<name>/SKILL.md`
+2. Restart Hermes to reload skills (or use `skill_view()` which reads from disk)
+3. Test with a small task to verify behavior
+
+## Debugging a Subagent
+
+1. Check the worktree log: `git -C .worktrees/<task>/ log --oneline`
+2. Check subagent output in the terminal tab (if using Hermes TUI)
+3. For eval tests: check Docker container logs
 
 ## How to Update
 
@@ -122,7 +97,7 @@ git commit --no-verify -m "..."
 ## Find It Fast
 
 ```bash
-grep -rn 'register_tool' src/jovaltus/__init__.py    # Where tools are registered
-grep -rn 'STAGE_ORDER' src/jovaltus/                # Stage machine constants
-ls src/jovaltus/prompts/                              # All subagent prompts
+ls src/jovaltus/skills/                              # All skills
+grep -rn '^name:' src/jovaltus/skills/*/SKILL.md       # Skill names
+cat src/jovaltus/__init__.py                           # Plugin entry (55 lines)
 ```

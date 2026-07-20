@@ -73,7 +73,7 @@ pre-commit install            # Git hooks: ruff check → mypy → ruff format
 ## Run Tests
 
 ```bash
-uv run pytest -v              # 68 tests in ~3.6s
+uv run pytest -v              # 39 tests
 ```
 
 ## Lint & Type Check
@@ -81,7 +81,7 @@ uv run pytest -v              # 68 tests in ~3.6s
 ```bash
 uv run ruff check .           # Zero warnings required
 uv run ruff format --check .  # Format verification
-uv run mypy --strict --no-site-packages *.py  # Zero errors required
+uv run mypy                   # Zero errors required (strict mode)
 ```
 
 ## Environment Variables
@@ -111,7 +111,7 @@ Jovaltus itself requires no env vars. The eval harness uses:
 ## Find It Fast
 
 ```bash
-hermes jovaltus status       # Check installation state
-hermes jovaltus update --check  # Check for updates
-cat ~/.hermes/jovaltus_state.json  # Persistent state
+hermes jovaltus status            # Check installation state
+hermes jovaltus update --check    # Check for updates
+cat ~/.hermes/jovaltus_state.json # Persistent state
 ```

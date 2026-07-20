@@ -5,7 +5,7 @@
 | Python | >=3.10 | Runtime | Plugin host language |
 | fabricium | >=0.1.1 | Framework | Hermes plugin SDK — git_utils, HermesPlugin, SkillEvalHarness |
 | hatchling | (build-system) | Build | PEP 621 wheel builder |
-| pytest | >=8 | Testing | Test framework, 68 tests |
+| pytest | >=8 | Testing | Test framework, 39 tests |
 | ruff | >=0.8 | Lint/Format | Linting + auto-formatting |
 | mypy | >=1.16 | Type Check | Strict type checking (`--strict`, zero errors) |
 | pre-commit | (hooks) | CI/CD | Git hooks: ruff check → mypy → ruff format |

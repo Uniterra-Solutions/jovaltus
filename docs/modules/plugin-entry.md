@@ -1,15 +1,16 @@
 # Plugin Entry
 
-**Purpose:** Hermes plugin registration entry point — wires tools, hooks, CLI commands,
-and bundled skills together at startup.
+**Purpose:** Hermes plugin registration entry point — self-bootstraps fabricium,
+delegates all registration to `HermesPlugin`, and serves as the single source
+file for the entire plugin.
 
-**Source:** `src/jovaltus/__init__.py` (86 lines) + `src/jovaltus/plugin.yaml`
+**Source:** `src/jovaltus/__init__.py` (55 lines) + `src/jovaltus/plugin.yaml`
 
 ## Public API
 
 | Entity | Signature | Description |
 |--------|-----------|-------------|
-| `register(ctx)` | `(ctx: Any) -> None` | Main entry point; registers 3 tools, 2 hooks, CLI, skills |
+| `register(ctx)` | `(ctx: Any) -> None` | Main entry point; delegates to `plugin.register(ctx)` |
 | `plugin` | `HermesPlugin(name="jovaltus", ...)` | Fabricium plugin instance (CLI + skills auto-discovered) |
 
 ## Registration Flow
@@ -19,94 +20,108 @@ Hermes starts
   → import jovaltus
     → _ensure_fabricium() — self-bootstrap if missing
     → from fabricium import HermesPlugin
-    → from . import hooks, schemas
-    → from .tools import make_*_handler
+    → plugin = HermesPlugin(name="jovaltus", ...)
   → jovaltus.register(ctx)
-    → plugin.register(ctx)       — Fabricium: CLI commands + bundled skills
-    → ctx.register_tool(...) x3  — Tools: implement, verify, simplify
-    → ctx.register_hook(...) x2  — Hooks: post_tool_call, pre_llm_call
+    → plugin.register(ctx)       — Fabricium handles everything:
+        → CLI commands: setup, status, update, update --check
+        → Skill auto-discovery from src/jovaltus/skills/
 ```
 
 ## Self-Bootstrap (`_ensure_fabricium`)
 
-`src/jovaltus/__init__.py:19-29`
+**Source:** `src/jovaltus/__init__.py:18-29`
 
-When Hermes recreates its venv (e.g., during an update), plugin-only dependencies
-like `fabricium` may be dropped. `_ensure_fabricium()` catches `ImportError`,
-runs `pip install --upgrade fabricium`, and clears stale import cache.
+```python
+def _ensure_fabricium() -> None:
+    try:
+        import fabricium
+    except ImportError:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--upgrade", "fabricium"],
+            check=True, capture_output=True,
+        )
+        sys.modules.pop("fabricium", None)
+```
 
-| Scenario | Action |
-|----------|--------|
-| `fabricium` import succeeds | No-op |
-| `fabricium` import fails | `pip install --upgrade fabricium`, clear `sys.modules` |
+Hermes manages its own venv and may recreate it during updates, dropping
+plugin-only dependencies. This guard ensures fabricium is installed on first
+import after a Hermes update without requiring a manual pip install.
 
-## Plugin Metadata (`plugin.yaml`)
+## Plugin Instance
 
-`src/jovaltus/plugin.yaml:1-8`
+**Source:** `src/jovaltus/__init__.py:39-43`
 
-| Field | Value |
-|-------|-------|
-| `name` | `jovaltus` |
-| `version` | `0.5.0` |
-| `provides_tools` | `jovaltus_implement`, `jovaltus_verify`, `jovaltus_simplify` |
+```python
+plugin = HermesPlugin(
+    name="jovaltus",
+    plugin_dir=_PLUGIN_DIR,           # Path(__file__).parent
+    default_profile="jovaltus-agent",
+)
+```
 
-## Registered Tools
+`HermesPlugin` auto-discovers:
+- **CLI commands**: `setup`, `status`, `update`, `update --check` — built into Fabricium
+- **Bundled skills**: All `SKILL.md` files under `src/jovaltus/skills/`
+- **Git operations**: Via `fabricium.git_utils`
 
-| Tool Name | Schema | Handler Factory |
-|-----------|--------|-----------------|
-| `jovaltus_implement` | `schemas.IMPLEMENT_SCHEMA` | `tools.make_implement_handler(ctx)` |
-| `jovaltus_verify` | `schemas.VERIFY_SCHEMA` | `tools.make_verify_handler(ctx)` |
-| `jovaltus_simplify` | `schemas.SIMPLIFY_SCHEMA` | `tools.make_simplify_handler(ctx)` |
+No manual tool registration, no hook registration, no schema definitions.
+The plugin is 55 lines of glue code.
 
-All three in toolset `"jovaltus"`.
+## plugin.yaml
 
-## Registered Hooks
+**Source:** `src/jovaltus/plugin.yaml` (4 lines)
 
-| Hook | Callback | Purpose |
-|------|----------|---------|
-| `post_tool_call` | `hooks.on_post_tool_call` | Detect Jovaltus tool returns, update pipeline stage |
-| `pre_llm_call` | `hooks.on_pre_llm_call` | Inject stage guidance banner before each LLM turn |
+```yaml
+name: jovaltus
+version: 0.6.0
+description: Jovaltus Agent Mode — automated development pipeline skills and CLI
+author: LaiTszKin
+```
 
-## Dependencies
+No `provides_tools` section — v0.6.0 removed all plugin tools in favor of
+skill-driven orchestration.
 
-### Imports
-| Module | Used For |
-|--------|----------|
-| `fabricium.HermesPlugin` | Plugin registration: CLI + bundled skills |
-| `hooks` | `on_post_tool_call`, `on_pre_llm_call` |
-| `schemas` | `IMPLEMENT_SCHEMA`, `VERIFY_SCHEMA`, `SIMPLIFY_SCHEMA` |
-| `tools` | `make_implement_handler`, `make_verify_handler`, `make_simplify_handler` |
+## Skill Auto-Discovery
 
-### Imported By
-| Module | Used For |
-|--------|----------|
-| Hermes runtime | Calls `jovaltus.register(ctx)` at startup |
+Fabricium scans `src/jovaltus/skills/` and registers every `SKILL.md` it finds.
+Skills are namespaced under the plugin name (e.g., `jovaltus:discuss`) but also
+available via short name when loaded from a profile with the plugin enabled.
 
-## Patterns & Gotchas
+| Skill Directory | Registered Name | Type |
+|----------------|-----------------|------|
+| `skills/discuss/` | `discuss` | Pipeline |
+| `skills/design/` | `design` | Pipeline |
+| `skills/to-spec/` | `to-spec` | Pipeline |
+| `skills/to-tasks/` | `to-tasks` | Pipeline |
+| `skills/to-environment/` | `to-environment` | Pipeline |
+| `skills/execute/` | `execute` | Pipeline |
+| `skills/review/` | `review` | Pipeline |
+| `skills/qa/` | `qa` | Pipeline |
+| `skills/agentic-debugging/` | `agentic-debugging` | Utility |
+| `skills/manage-agents-md/` | `manage-agents-md` | Utility |
+| `skills/project-documentation/` | `project-documentation` | Utility |
 
-- **Self-bootstrap order matters:** `_ensure_fabricium()` runs BEFORE the `from fabricium import ...` line.
-  The `# noqa: E402` comments are intentional — ruff would flag an import not at top-of-file.
-- **Closure factory pattern:** All handlers are closures created in `register()`, capturing `ctx`.
-  Prompts are loaded at factory creation time, not at invocation time.
-- **Two-tier registration:** `plugin.register(ctx)` (Fabricium) handles generic Hermes plugin
-  concerns (CLI, skills); the rest handles Jovaltus-specific tools and hooks. This separation
-  avoids duplicating CLI registration code.
-- **Bundled skills auto-discovered:** Fabricium scans `skills/` directory tree for `SKILL.md`
-  files with YAML frontmatter. No manual registration needed.
-- **No class-based plugin:** Everything uses functions + closures. No `Plugin` class, no
-  inheritance from a base plugin class.
+## Module Boundaries
+
+| Boundary | Rule |
+|----------|------|
+| Plugin code | Only `__init__.py` — no other Python modules |
+| Behavior | Defined in skill documents (`SKILL.md`), not in Python |
+| Git operations | Delegated to `fabricium.git_utils` |
+| CLI parsing | Delegated to `fabricium.HermesPlugin` |
+| Skill loading | Delegated to Hermes runtime via `skill_view()` |
 
 ## How to Update
 
-- New tool added? → Add `ctx.register_tool(...)` call + new import from `schemas`
-- New hook added? → Add `ctx.register_hook(...)` call
-- CLI command added? → Handled by Fabricium — add to `plugin.yaml` or Fabricium config
-- Bundled skill added/removed? → Add/remove directory under `src/jovaltus/skills/`
+- New CLI command? → May require fabricium update; plugin code stays minimal
+- Skill added/removed? → Update Skill Auto-Discovery table
+- `plugin.yaml` changes? → Update plugin.yaml section
+- Bootstrap logic changes? → Update Self-Bootstrap section
 
 ## Find It Fast
 
 ```bash
-grep -n 'register_tool\|register_hook' src/jovaltus/__init__.py  # All registrations
-grep -n '_ensure_fabricium' src/jovaltus/__init__.py              # Bootstrap guard
-ls src/jovaltus/skills/                                           # Bundled skills list
+cat src/jovaltus/__init__.py                       # Full plugin (55 lines)
+cat src/jovaltus/plugin.yaml                        # Plugin metadata (4 lines)
+ls src/jovaltus/skills/                             # All bundled skills
 ```

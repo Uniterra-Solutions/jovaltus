@@ -15,11 +15,10 @@ Test framework, commands, conventions, and layout.
 ## Commands
 
 ```bash
-uv run pytest -v                          # Full suite (68 tests, ~3.6s)
-uv run pytest -v tests/test_state.py      # Single file
-uv run pytest -v -k "test_create_task"    # Single test
-uv run pytest -v tests/unit/              # (if split into subdirs)
-uv run pytest -v -m "not integration"     # Exclude integration tests
+uv run pytest -v                          # Full suite (39 tests)
+uv run pytest -v tests/test_git_utils.py  # Single file
+uv run pytest -v -k "test_get_diff"       # Single test
+uv run pytest -v --ignore=tests/evals     # Skip eval tests (no Docker/API needed)
 ```
 
 ## Test Directory Layout
@@ -28,53 +27,48 @@ uv run pytest -v -m "not integration"     # Exclude integration tests
 tests/
 ├── conftest.py              # Shared fixtures (git_repo, clear_task_state)
 ├── __init__.py
-├── test_state.py            # State machine unit tests
-├── test_tools.py            # Tool handler unit tests
-├── test_schemas.py          # Schema validation tests
-├── test_sync.py             # (sync/coordination tests)
-├── test_git_utils.py        # Git utility tests
+├── test_git_utils.py        # 18 tests — git operations via fabricium
+├── test_sync.py             # 8 tests — state persistence + skill sync
 ├── integration/
 │   ├── conftest.py          # Integration fixtures
-│   └── test_cli.py          # CLI command tests
+│   └── test_cli.py          # 8 tests — CLI (setup, status, update)
 └── evals/
-    ├── conftest.py          # Eval harness fixtures (Docker)
+    ├── conftest.py          # Eval harness fixtures (Docker + LLM APIs)
     ├── __init__.py
-    ├── test_jovaltus_skills.py  # End-to-end pipeline eval
+    ├── test_jovaltus_skills.py  # 4 tests — end-to-end pipeline eval
     ├── tasks.py             # Eval task definitions
     └── rubrics.py           # Eval scoring rubrics
 ```
 
 ## Fixture Patterns
 
-### `clear_task_state` (autouse, `tests/conftest.py:11-15`)
+### `clear_task_state` (autouse, `tests/conftest.py`)
 
 Resets in-memory state before every test. Runs automatically via `autouse=True`.
-Prevents cross-test pollution.
 
-### `git_repo` (function-scoped, `tests/conftest.py:18-45`)
+### `git_repo` (function-scoped, `tests/conftest.py`)
 
-Creates a temporary git repo with an initial commit. Uses `tmp_path` fixture —
-each test gets an isolated repo. Configures git user + email for commit.
+Creates a temporary git repo with an initial commit. Uses `tmp_path` — each test
+gets an isolated repo. Configures git user + email for commit.
 
-### `eval_harness` (session-scoped, `tests/evals/conftest.py:44-64`)
+### `eval_harness` (session-scoped, `tests/evals/conftest.py`)
 
 Docker-based harness for pipeline evaluation. Requires LLM API keys.
-Creates two profiles: `bare` (no Jovaltus) and `jovaltus-agent` (with Jovaltus).
+Creates profiles: `bare` (no Jovaltus) and `jovaltus-agent` (with Jovaltus).
 
 ## Fixture Usage
 
 ```python
 def test_something(git_repo):
     # git_repo is a Path to an initialized git repo with one commit
-    from jovaltus import state
-    task_id = state.create_task(str(git_repo), "abc123")
-    assert task_id.startswith("jt-")
+    from fabricium.git_utils import get_head_hash
+    assert get_head_hash(str(git_repo)) is not None
 ```
 
 ## Mock Policy
 
-No mocking by default. Tests use real git repos (`tmp_path`) and real subprocess calls.
-The `git_repo` fixture provides real git repos in temp directories — no `unittest.mock`.
+No mocking by default. Tests use real git repos (`tmp_path`) and real subprocess
+calls. The `git_repo` fixture provides real git repos in temp directories.
 
 ## Eval Tests
 
@@ -98,8 +92,6 @@ Pre-commit hooks (`pre-commit run --all-files`):
 2. `mypy --strict` — type check (blocks on failure)
 3. `ruff format` — auto-formats after checks pass
 
-No CI workflow file in repo. [INFERRED] CI may be configured in GitHub Actions externally.
-
 ## Test File Naming
 
 | Pattern | Example |
@@ -122,7 +114,6 @@ No CI workflow file in repo. [INFERRED] CI may be configured in GitHub Actions e
 - New test file added? → Add to Test Directory Layout
 - Test framework/runner changed? → Update Framework table
 - New fixture added? → Add to Fixture Patterns
-- Mock policy changed? → Update Mock Policy
 
 ## Find It Fast
 

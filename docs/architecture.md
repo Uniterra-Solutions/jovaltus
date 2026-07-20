@@ -1,134 +1,158 @@
 # Architecture — Jovaltus
 
-Jovaltus is a Hermes plugin that implements a 4-phase automated development pipeline
-(Plan → Implement → Verify → Simplify) by spawning isolated subagents for each phase
-and tracking progress via an in-memory stage machine.
+Jovaltus is a Hermes plugin that bundles 11 agent skills for a complete
+development pipeline. The plugin itself is minimal (~55 lines of Python);
+all behavior is defined in skill documents.
 
 ## System Context (C4 Level 1)
 
 ```mermaid
 graph TD
-    User[Human Developer] -->|Natural Language| Hermes[Hermes Agent]
-    Hermes -->|register ctx| Jovaltus[Jovaltus Plugin]
-    Jovaltus -->|dispatch_tool| Subagent[Subagent Process]
+    Orchestrator[Orchestrator Agent] -->|skill_view| Skills[Bundled Skills]
+    Orchestrator -->|terminal bg| Subagent[Subagent Process]
     Subagent -->|git commit| Repo[Git Repository]
-    Jovaltus -->|LLM APIs| LLM[LLM Provider]
-    Jovaltus -->|Docker| Eval[Eval Harness]
+    Skills -->|guide| Orchestrator
+    Subagent -->|read task| Worktree[Git Worktree]
 ```
 
-**Users:** Human developers interacting with Hermes agent (chat).
+**Users:** An orchestrator agent (human + LLM) that loads skills and follows
+their guidance to drive the development pipeline.
 
 **External services:**
 
 | Service | Purpose | Protocol |
 |---------|---------|----------|
 | Hermes Agent Runtime | Host process; calls `register(ctx)` at startup | Python in-process |
-| LLM Provider | Powers subagent reasoning (Claude, DeepSeek, etc.) | HTTP API |
-| Git Repository | Source of truth for code changes; subagents commit here | git CLI |
+| LLM Provider | Powers orchestrator + subagent reasoning | HTTP API |
+| Git Repository | Source of truth; subagents commit to isolated worktrees | git CLI |
 | Docker | Isolated environment for eval harness | Docker API |
 
 ## Container View (C4 Level 2)
 
 ```mermaid
 graph TD
-    Main[Main Agent] -->|tool call| JT[Jovaltus Tools]
-    JT -->|delegate_task| SA[Subagent Process]
-    SA -->|terminal + file| FS[Filesystem / Git]
-    JT -->|read/write| State[In-Memory State]
-    Hooks[Hooks] -->|inject context| Main
-    State -->|stage query| Hooks
-    Prompts[Prompt Files] -->|read at init| JT
-    Fabricium[Fabricium SDK] -->|git_utils| FS
-    Fabricium -->|HermesPlugin| CLI[CLI Commands]
+    Orch[Orchestrator] -->|skill_view| Skills[Bundled Skills 11x]
+    Orch -->|terminal bg| Sub[Subagent]
+    Sub -->|git| WT[Worktree]
+    Fabricium[Fabricium SDK] -->|HermesPlugin| CLI[CLI Commands]
+    Fabricium -->|git_utils| Git[Git Ops]
+    Fabricium -->|SkillEvalHarness| Eval[Eval Harness]
 ```
 
 | Container | Technology | Purpose |
 |-----------|-----------|---------|
-| Jovaltus Tools | Python closures (factory pattern) | Validate pipeline stage, spawn subagents |
-| Subagent Process | Hermes `delegate_task` | Isolated execution: implement/verify/simplify |
-| In-Memory State | `threading.Lock`-protected dict | Task records + stage machine |
-| Hooks | `post_tool_call` + `pre_llm_call` | Stage tracking + guidance injection |
-| Prompt Files | Markdown in `prompts/` | Subagent system prompts loaded at handler creation |
-| Fabricium SDK | `fabricium` pkg | `git_utils` (git ops), `HermesPlugin` (CLI + skills) |
+| Bundled Skills | Markdown (SKILL.md) | 11 self-contained skill documents — pipeline phases + utilities |
+| Orchestrator | Hermes agent | Loads skills, spawns subagents, controls pipeline flow |
+| Subagent Process | Hermes `terminal(background=true)` | Isolated execution in worktree; implements, reviews, tests |
+| Fabricium SDK | `fabricium` pkg | `git_utils`, `HermesPlugin` (CLI + skill auto-discovery), `SkillEvalHarness` |
+| CLI Commands | `hermes jovaltus setup\|status\|update` | Profile management + skill installation |
 
-## Pipeline Stage Machine
+## Pipeline Flow (Skill-Driven)
 
 ```
-idle → implement → verify → simplify → done
-  ↑        ↓           ↓          ↓        │
-  └────────┴───────────┴──────────┴────────┘
-           (any stage can reset to idle)
+discuss → design → to-spec → to-tasks → to-environment → execute → (review + merge → qa)
 ```
 
-| Stage | Trigger Tool | Next Stage | Subagent Tools |
-|-------|-------------|------------|----------------|
-| implement | `jovaltus_implement` | verify | terminal, file |
-| verify | `jovaltus_verify` | simplify | terminal, file, computer_use |
-| simplify | `jovaltus_simplify` | done | terminal, file |
+The orchestrator loads one skill at a time. Each skill describes:
+- **What** to produce at that phase
+- **How** to produce it (step-by-step)
+- **When** to move to the next phase (acceptance criteria)
 
-**Dual mode:** `jovaltus_verify` and `jovaltus_simplify` also support stateless
-commit-based invocation via `before`/`after` parameters, bypassing the stage machine.
+No hardcoded pipeline engine. The orchestrator reads the skill, follows its
+guidance, produces the artifact, then loads the next skill.
 
-## Data Flow
+### Phase Details
 
-### Task ID Mode (Stateful Pipeline)
+| Phase | Skill | Input | Output | Subagents? |
+|-------|-------|-------|--------|------------|
+| 1 | `discuss` | User idea | `prd.md` | No |
+| 2 | `design` | PRD | `design.md` | No |
+| 3 | `to-spec` | PRD + design | Implementation specs | No |
+| 4 | `to-tasks` | Specs | Manifest + task files | No |
+| 5 | `to-environment` | Manifest | Git worktrees | No |
+| 6 | `execute` | Worktrees | Implemented code | Yes (parallel) |
+| 7 | `review` | Implemented code | Reviewed + merged code | Yes (per worktree) |
+| 8 | `qa` | Merged code | QA report | Yes |
 
-1. User confirms requirements (Phase 0)
-2. Main agent calls `jovaltus_implement(plan=...)` → handler:
-   - Validates no active task (or stage idle/done)
-   - Records `start_hash` + `task_id`
-   - Spawns implement subagent with plan context
-   - `post_tool_call` hook sets stage to `implement`
-3. Main agent calls `jovaltus_verify(task_id=...)` → handler:
-   - Validates stage is `implement`
-   - Computes `start_hash..HEAD` diff
-   - Spawns verify subagent with diff context
-4. Main agent calls `jovaltus_simplify(task_id=...)` → handler:
-   - Validates stage is `verify`
-   - Spawns simplify subagent with diff context
-5. `pre_llm_call` hook injects stage banner before each LLM turn
+### Parallel Execution Model
 
-### Commit Mode (Stateless)
+The `execute` phase is **flat-parallel**: all tasks run simultaneously because
+file ownership is proven disjoint by `to-tasks`. Cross-task dependencies are
+resolved via **inlined interface contracts** (function signatures, types) in
+each TASK.md — no runtime coupling, no task-to-task communication.
 
-1. Main agent calls `jovaltus_verify(before=<hash>)` or `jovaltus_simplify(before=<hash>)`
-2. Handler computes `before..HEAD` diff directly
-3. Spawns subagent with diff context — no state lookup, no stage validation
+```
+to-tasks proves no file overlaps
+    → to-environment creates isolated worktrees
+        → execute spawns N subagents simultaneously
+            → all commit independently, zero merge conflicts
+```
+
+## Plugin Architecture
+
+The plugin entry point (`src/jovaltus/__init__.py`, 55 lines):
+
+```python
+def _ensure_fabricium():
+    # Self-bootstrap: pip install fabricium if missing
+    # Survives Hermes venv recreation during updates
+
+plugin = HermesPlugin(
+    name="jovaltus",
+    plugin_dir=_PLUGIN_DIR,
+    default_profile="jovaltus-agent",
+)
+
+def register(ctx):
+    plugin.register(ctx)  # Fabricium handles: CLI commands + skill discovery
+```
+
+**What Fabricium handles:**
+- CLI command registration (`setup`, `status`, `update`, `update --check`)
+- Bundled skill auto-discovery from `src/jovaltus/skills/`
+- Git operations via `fabricium.git_utils`
+- Eval harness via `fabricium.evals.SkillEvalHarness`
+
+**What the plugin does NOT do (unlike v0.5.x):**
+- No tool handlers — no `jovaltus_implement`, `jovaltus_verify`, `jovaltus_simplify`
+- No state machine — no `state.py`, no stage tracking
+- No hooks — no `hooks.py`, no guidance injection
+- No subagent spawning — the orchestrator spawns subagents directly via `terminal(background=true)`
 
 ## Key Architectural Decisions
 
 | Decision | Rationale | Status |
 |----------|-----------|--------|
-| Handler factories create closures | `register()` captures `ctx`, avoids class instances | Active |
-| Dual-mode tools (task_id + commit) | Pipeline for structured workflows; commit mode for ad-hoc review | Active |
-| In-memory state with `threading.Lock` | Plugin instances are single-process; no persistence needed | Active |
-| Subagent prompts as Markdown files | Editable without touching Python; loaded at factory creation time | Active |
+| Skill-driven, not engine-driven | Pipeline flexibility; skills editable without touching Python | Active |
+| Flat-parallel execution | File ownership proven disjoint → zero merge conflicts | Active |
+| Fabricium as sole dependency | Avoids duplicating git wrappers, CLI registration, and skill bundling | Active |
 | Self-bootstrap fabricium on import | Hermes may recreate venv, dropping plugin deps; repair on first import | Active |
-| Hooks for soft enforcement (not forced) | Agent always knows its stage but can override; avoids fighting the LLM | Active [INFERRED] |
-| Fabricium for git + CLI infrastructure | Avoids duplicating git wrappers and CLI registration in every Hermes plugin | Active |
+| Minimal plugin (< 60 lines) | Plugin is glue; skills contain all behavior | Active |
+| Worktree isolation per task | Prevents cross-task contamination; enables true parallelism | Active |
+| Interface contracts in TASK.md | Eliminates cross-task runtime dependencies | Active |
 
 ## Deployment
 
 Jovaltus is distributed as a pip-installable Hermes plugin via PyPI (trusted publisher).
-No Docker image, no server — just a Python package.
 
 ```
 CI/CD → git tag → PyPI trusted publisher → pip install jovaltus
 ```
 
-`hermes jovaltus setup` creates the `jovaltus-agent` profile, installs bundled skills,
-and optionally applies `SOUL.md`.
+`hermes jovaltus setup` creates the `jovaltus-agent` profile, installs bundled
+skills, and optionally applies `SOUL.md`.
 
 ## How to Update
 
-- New pipeline stage? → Update stage machine diagram + `state.py` `STAGE_ORDER`
-- New tool added? → Add node to Container View + add to `register()`
-- External dependency added? → Add node to System Context
-- Data flow changes? → Update Data Flow section
+- New skill added? → Add to Phase Details table + Pipeline Flow diagram
+- Pipeline order changes? → Update flow diagram + phase numbering
+- Plugin API changes? → Update Plugin Architecture section
+- Fabricium API changes? → Update Container View
 
 ## Find It Fast
 
 ```bash
-grep -n 'dispatch_tool' src/jovaltus/tools.py     # Subagent spawn points
-grep -n 'STAGE_ORDER' src/jovaltus/state.py        # Stage machine definition
-grep -n 'register_hook' src/jovaltus/__init__.py   # Hook registration
+ls src/jovaltus/skills/                      # All bundled skills
+cat src/jovaltus/__init__.py                 # Plugin entry (55 lines)
+grep -rn 'register' src/jovaltus/__init__.py # Registration logic
 ```

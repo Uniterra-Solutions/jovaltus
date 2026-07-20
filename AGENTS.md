@@ -1,8 +1,8 @@
-# Jovaltus — Hermes Plugin Agent Mode
+# Jovaltus — Hermes Plugin (Skill-Driven Development Pipeline)
 
 ## Build & Test
 
-- `uv run pytest -v` — Run full test suite (80 tests)
+- `uv run pytest -v` — Run full test suite (39 tests)
 - `uv run ruff check .` — Lint
 - `uv run ruff format --check .` — Format check
 - `uv run mypy` — Type check (strict mode, config in `pyproject.toml`)
@@ -20,41 +20,47 @@
 
 ## Project Structure
 
-- `src/jovaltus/` — Plugin package (src layout; root is NOT the package)
-- `src/jovaltus/__init__.py` + `plugin.yaml` — Plugin entry point
-- `src/jovaltus/tools.py` — Tool handler factories (implement, verify, simplify); dual-mode: task_id + commit-based
-- `src/jovaltus/schemas.py` — Tool JSON schemas for LLM consumption
-- `src/jovaltus/state.py` — Thread-safe in-memory task state
-- `src/jovaltus/hooks.py` — Plugin lifecycle hooks
-- `src/jovaltus/prompts/*.md` — Subagent system prompts (editable without touching Python)
-- `src/jovaltus/skills/` — Bundled agent skills (e.g. `jovaltus-agent`)
-- `tests/` — 80 pytest tests across 7 test files + conftest.py
+- `src/jovaltus/__init__.py` — Plugin entry point: self-bootstraps fabricium, delegates to `HermesPlugin`
+- `src/jovaltus/plugin.yaml` — Plugin metadata (name, version, description)
+- `src/jovaltus/SOUL.md` — Agent identity file applied during `hermes jovaltus setup`
+- `src/jovaltus/skills/` — 11 bundled agent skills (8 pipeline + 3 utility):
+  - **Pipeline**: `discuss` → `design` → `to-spec` → `to-tasks` → `to-environment` → `execute` → `review` + `qa`
+  - **Utility**: `agentic-debugging`, `manage-agents-md`, `project-documentation`
+- `tests/` — 39 pytest tests across 4 test files + conftest
+  - `test_git_utils.py` (18), `test_sync.py` (8)
+  - `integration/test_cli.py` (8), `evals/test_jovaltus_skills.py` (4)
 
-## Key Constraints
+## Architecture
 
-- All handler functions must accept `(args: dict, **kwargs)` and return JSON string
-- All git commands use list args (no `shell=True`) — enforced by `fabricium.git_utils`
-- State uses `threading.Lock` for thread safety
-- Handler factories capture `ctx` in `register()` — closures, not class instances
-- Prompt files loaded at factory creation time, not at handler invocation
-- Plugin skills are namespaced (`jovaltus:jovaltus-agent`), loaded via `skill_view()`
+v0.6.0 rewrote Jovaltus from a stateful pipeline engine into a **skill-driven
+Direct Delegate Pattern**. The plugin no longer runs subagents through tool
+handlers; it bundles agent skills that guide the orchestrator through each phase.
+
+- **No more tools**: `jovaltus_implement`, `jovaltus_verify`, `jovaltus_simplify` are removed
+- **No more state machine**: `state.py`, `hooks.py`, `schemas.py` deleted (~1,700 lines)
+- **No more subagent prompts**: `prompts/*.md` deleted — replaced by skill documents
+- **Fabricium handles everything**: CLI commands (`setup`, `status`, `update`) and skill bundling
+
+## Pipeline (Skill-Driven)
+
+```
+discuss → design → to-spec → to-tasks → to-environment → execute → (review + merge)
+```
+
+All tasks run in parallel (flat architecture) — file ownership is proven disjoint.
+Cross-task dependencies resolved via inlined interface contracts in TASK.md.
+
+## CLI Commands
+
+- `hermes jovaltus setup` — Create `jovaltus-agent` profile, install skills, apply SOUL.md
+- `hermes jovaltus status` — Show installation state
+- `hermes jovaltus update` — Sync skills, update SOUL.md, pull latest source
+- `hermes jovaltus update --check` — Check for updates without applying
 
 ## Documentation
 
-- `docs/features/` — User-visible behaviour in BDD format (Given/When/Then)
-- `docs/architecture/` — Module boundaries and design principles
-- `docs/principles/` — Code conventions with source evidence
+- `docs/` — Architecture, conventions, project structure, testing, workflows, setup
 - Every doc claim traces to source file + line range. `[INFERRED]` marks unverifiable claims.
-
-## Workflow
-
-The Jovaltus pipeline has two modes:
-
-**Stateful (task_id):** Phase 0 confirmation → `jovaltus_implement` → `jovaltus_verify(task_id)` → `jovaltus_simplify(task_id)`
-
-**Stateless (commit mode):** `jovaltus_verify(before=<hash>)` / `jovaltus_simplify(before=<hash>)` — operates on any commit range, no pipeline state. `task_id` and `before` are mutually exclusive.
-
-For detailed CLI commands (`hermes jovaltus setup`, `status`, `update`), see `README.md`.
 
 ## Boundaries
 
@@ -65,10 +71,8 @@ For detailed CLI commands (`hermes jovaltus setup`, `status`, `update`), see `RE
 
 **Ask first:**
 - Adding new dependencies
-- Changing the plugin API surface (schemas, tool signatures)
-- Modifying the bundled skill (`src/jovaltus/skills/jovaltus-agent/SKILL.md`)
+- Modifying bundled skills (`src/jovaltus/skills/*/SKILL.md`)
 
 **Never:**
 - Commit `.env` files or secrets
-- Use `shell=True` in subprocess calls
 - Edit `generated/` or `__pycache__/` directories

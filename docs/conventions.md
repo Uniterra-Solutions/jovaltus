@@ -7,13 +7,14 @@ extend Python defaults.
 
 | Element | Convention | Example |
 |---------|-----------|---------|
-| Module files | snake_case | `git_utils.py`, `test_tools.py` |
-| Public functions | snake_case | `make_implement_handler`, `create_task` |
-| Private functions | `_` prefix | `_read_prompt`, `_resolve_dir`, `_spawn_review_subagent` |
-| Module-level constants | `UPPER_SNAKE` with `_` prefix if private | `_PLUGIN_DIR`, `_PROMPTS_DIR`, `STAGE_ORDER` |
-| Task IDs | `jt-<timestamp>-<counter>` | `jt-1720000000000-1` |
-| Test files | `test_<module>.py` | `test_state.py`, `test_schemas.py` |
-| Test functions | `test_<behaviour>` | `test_create_task`, `test_stage_transition_valid` |
+| Module files | snake_case | `test_git_utils.py`, `test_sync.py` |
+| Public functions | snake_case | `register`, `_ensure_fabricium` |
+| Private functions | `_` prefix | `_ensure_fabricium` |
+| Module-level constants | `UPPER_SNAKE` with `_` prefix if private | `_PLUGIN_DIR` |
+| Test files | `test_<module>.py` | `test_git_utils.py` |
+| Test functions | `test_<behaviour>` | `test_is_git_repo_true` |
+| Skill directories | lowercase, hyphens | `to-tasks`, `agentic-debugging` |
+| Skill names (frontmatter) | lowercase, hyphens | `name: to-tasks` |
 
 ## Import Ordering
 
@@ -21,16 +22,12 @@ Enforced by ruff. Standard sections: stdlib → third-party → local.
 
 ```python
 # stdlib
-import json
 import logging
+import subprocess
 from pathlib import Path
 
 # third-party
 from fabricium import HermesPlugin
-
-# local
-from . import hooks, schemas
-from .tools import make_implement_handler
 ```
 
 Self-bootstrap imports (`fabricium`) use `# noqa: E402` when placement after
@@ -40,53 +37,48 @@ the bootstrap guard is intentional.
 
 | Pattern | Usage |
 |---------|-------|
-| Return JSON error string | All handler functions return `json.dumps({"error": ...})` — never raise |
-| Try/except in handlers | Top-level handler catches `Exception`, logs, returns error JSON |
-| `logger.exception` | Used in `except` blocks to capture traceback |
-| Validation functions | Return `str | None` — error JSON on failure, `None` on success |
-| Stage validation | `set_stage()` returns `bool` — caller handles rejection |
+| `_ensure_fabricium()` guard | Try/import/except → pip install → retry; plugin never fails to load |
+| `subprocess.run(..., check=True)` | Git operations fail fast with clear traceback |
+| `logging.getLogger(__name__)` | Standard Python logging, not print |
 
 ## Git Commands
 
-All git operations use **list args, never `shell=True`**.
+All git operations use **list args, never `shell=True`** (enforced by
+`fabricium.git_utils`).
 
 ```python
-# Correct
+# fabricium.git_utils wraps this pattern:
 subprocess.run(["git", "commit", "-m", "message"], cwd=repo)
-
-# Never
-subprocess.run("git commit -m 'message'", shell=True)
 ```
 
-This is enforced by `fabricium.git_utils` which wraps all git commands.
+## Plugin Pattern
 
-## State Management
-
-| Rule | Reason |
-|------|--------|
-| All state mutations inside `with _lock:` | `threading.Lock` for thread safety |
-| Task state is in-memory only | No persistence; cleared on plugin reload |
-| `clear_tasks()` also clears active task reference | Avoid dangling pointer |
-| `set_stage` is idempotent (same stage → True) | Prevent spurious failure on retry |
-
-## Factory Pattern
-
-Handler creation uses **closures, not classes**:
+Jovaltus uses the **HermesPlugin delegate pattern** via Fabricium:
 
 ```python
-def make_implement_handler(ctx):
-    prompt = _read_prompt("implement")      # captured at creation time
+plugin = HermesPlugin(
+    name="jovaltus",
+    plugin_dir=_PLUGIN_DIR,
+    default_profile="jovaltus-agent",
+)
 
-    def handler(args, **kwargs):            # closure over ctx + prompt
-        ...
-        ctx.dispatch_tool("delegate_task", {...})
-        ...
-
-    return handler
+def register(ctx):
+    plugin.register(ctx)  # All registration delegated to Fabricium
 ```
 
-- Prompts loaded at factory creation time, not at handler invocation
-- `ctx` captured once in `register()`
+- Plugin is minimal (~55 lines) — all behavior in skills
+- `HermesPlugin` auto-discovers skills from `skills/` directory
+- CLI commands registered via Fabricium's built-in command set
+
+## Skill Conventions
+
+| Convention | Detail |
+|-----------|--------|
+| YAML frontmatter | Required: `name`, `description`, `author`, `version` |
+| Verb-form naming | Pipeline skills use verb form: `discuss`, `design`, `execute` |
+| Progressive disclosure | Core content first; details in references/assets |
+| Skill independence | Every skill loadable standalone; no hard dependency on prior skills |
+| Description field | Must include LOAD/Do NOT use triggers for routing |
 
 ## Testing
 
@@ -94,24 +86,19 @@ def make_implement_handler(ctx):
 |-----------|--------|
 | `autouse` fixture clears state | `clear_task_state` fixture runs before every test |
 | `git_repo` fixture creates temp repo | Isolated git repo per test via `tmp_path` |
-| Fixture-based tools | `conftest.py` provides shared fixtures; no mocking by default |
+| No mocking by default | Tests use real git repos and subprocess calls |
 | Integration tests in `tests/integration/` | Separate from unit tests |
 | Eval tests in `tests/evals/` | Use `SkillEvalHarness`; require Docker + LLM API keys |
 
 ## Commit Messages
 
-Subagent commits follow a consistent prefix:
-
-| Phase | Commit Message |
-|-------|----------------|
-| Implement | `jovaltus: implement phase` |
-| Verify | `jovaltus: verify & fix phase` |
-| Simplify | `jovaltus: simplify phase` |
+Follow conventional commits where applicable. The CHANGELOG follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Security
 
-- Never commit `.env` files (no `.env` in repo — verified)
-- No hardcoded API keys — eval config comes from environment variables
+- Never commit `.env` files
+- No hardcoded API keys — eval config from environment variables
 
 ## Pre-commit Hook Order
 
@@ -126,13 +113,12 @@ Subagent commits follow a consistent prefix:
 - New naming pattern adopted? → Add to Naming table
 - Import style changes? → Update Import Ordering
 - New error handling pattern? → Add to Error Handling
-- Factory pattern changes? → Update Factory Pattern section
+- Skill conventions change? → Update Skill Conventions
 
 ## Find It Fast
 
 ```bash
 grep -rn 'def _' src/jovaltus/              # Private functions
-grep -rn 'logger\.exception' src/jovaltus/  # Exception logging
-grep -rn 'shell=True' src/jovaltus/         # Should return nothing
-grep -rn 'with _lock' src/jovaltus/         # Lock usage points
+grep -rn 'name:' src/jovaltus/skills/*/SKILL.md  # All skill names
+grep -rn 'from fabricium' src/              # All fabricium usage
 ```
