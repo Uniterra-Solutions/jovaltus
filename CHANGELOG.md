@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.7.0 — 2026-07-21
+
+### Added
+
+- **`manage-git-repo` skill** (utility): guides agents through two independent
+  workflows — structured git commits grouped by change category, and semantic
+  version releases with automatic version-reference updates, changelog
+  maintenance, and annotated tag creation.
+
+### Changed
+
+- Bundled skills: 12 → 13 (9 pipeline + 4 utility)
+
 ## v0.6.0 — 2026-07-20
 
 ### Architecture Rewrite
