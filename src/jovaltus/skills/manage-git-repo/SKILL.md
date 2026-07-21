@@ -1,27 +1,12 @@
 ---
 name: manage-git-repo
 description: >-
-  Git repository management: structured commits and semantic version releases.
-
-  Workflow A — commit: update project docs first, then split remaining changes
-  into focused commits by change category (docs, feat, fix, refactor, chore).
-  Each commit is self-contained and passes pre-commit checks.
-
-  Workflow B — version-release: push all commits (if push access), identify
-  version bump type (major/minor/patch) from commits, update every file that
-  references the current version, bump changelog, create an annotated git tag.
-
-  LOAD when:
-  - User says "commit" / "release" / "version bump" / "提交" / "發布"
-  - User wants structured git commits grouped by change type
-  - User wants to create versioned releases with semver tags
-
-  Do NOT use for:
-  - Single-file quick commits (use git directly)
-  - Release automation / CI pipeline setup
-  - Creating releases without git (e.g. npm publish, PyPI upload)
+  Structured git commits grouped by change category and semantic version
+  releases with changelog + annotated tags. Use when user asks to commit,
+  release, bump version, or 提交/發布. Do NOT use for single-file quick
+  commits, CI/CD pipeline setup, or non-git releases (npm publish, PyPI).
 author: LaiTszKin
-version: 0.1.0
+version: 0.2.0
 metadata:
   jovaltus:
     tags: [git, commit, release, semver, versioning, changelog, tag]
@@ -31,254 +16,162 @@ metadata:
 
 ## Goal
 
-Two independent workflows for git repo housekeeping:
+Two independent workflows for git housekeeping:
 
-- **Workflow A — Commit:** Stage and commit changes in logically grouped
-  batches by change category. Documentation first, then refactors, then
-  features/fixes, then tests. Every commit passes pre-commit hooks.
+- **Workflow A — Commit:** Group working-tree changes by category and commit
+  them in logical order (docs → refactor → feat/fix → test). Every commit
+  passes pre-commit hooks and uses conventional commit format.
 
-- **Workflow B — Version Release:** Determine semantic version bump from
-  commit history, update all version references across the project, maintain
-  a clean changelog, create an annotated git tag, and push (if permitted).
+- **Workflow B — Version Release:** Determine the semantic version bump from
+  commit history, update every version reference across the project, maintain
+  the changelog, create an annotated `v`-prefixed tag, and push if the user
+  confirms push access.
 
-Workflows are independent — you can commit without releasing, or release an
+Workflows are independent — commit without releasing, or release an
 already-committed state.
+
+## Core Principles
+
+**Commit ordering is a dependency chain.** Documentation and chores go first
+because they describe the current state; refactors come next because features
+and fixes build on clean code; tests go last because they validate the
+features/fixes above them. Chronological order is irrelevant — only logical
+dependency matters.
+
+**Cumulative semver — highest applicable bump wins.** A release containing five
+`feat:` commits and three `fix:` commits is a MINOR bump (feat dominates fix).
+A single BREAKING CHANGE forces MAJOR regardless of everything else.
+
+**Push is opt-in.** Never push without explicit confirmation. A remote URL
+proves the remote exists — it does not prove the user wants to push to it.
+The remote could be a fork, a read-only mirror, or intentionally local work.
+
+**Version references are declarations only.** Replace version strings in
+structured fields (`pyproject.toml`, `package.json`, `plugin.yaml`,
+`__version__`). Never touch historical prose like "v0.6.0 rewrote the
+architecture" — those are historical facts, not version declarations.
 
 ## Workflow A: Commit
 
-### Acceptance Criteria
+### A.1 — Check for changes
 
-- Project documentation (AGENTS.md, CLAUDE.md, docs/) reviewed and updated first
-- Changes grouped by category: docs, feat, fix, refactor, chore, test
-- Each commit passes pre-commit hooks (lint, type-check, format)
-- Commit messages follow conventional format: `<type>(<scope>): <description>`
-- No `.env`, secrets, or generated files committed
+Abort if the working tree has no changes. Report what's staged vs unstaged.
 
-### Step A.1: Verify Working Tree
+### A.2 — Update documentation first
 
-```bash
-git status
-git diff --stat
-```
+Before committing code, review and update:
+- `AGENTS.md` / `CLAUDE.md` — build/test commands still accurate?
+- `docs/` — any references to behaviour that changed?
+- `README.md` — outdated information?
 
-Abort if there are no changes. Report what's staged vs unstaged.
+Apply fixes. This becomes the first commit — documentation describes what
+exists, so it must be current before any code changes land.
 
-### Step A.2: Update Project Documentation
+### A.3 — Categorize remaining changes
 
-Before committing code changes, review and update:
-- `AGENTS.md` / `CLAUDE.md` — are build/test commands still correct?
-- `docs/` — do any docs reference changed behaviour?
-- `README.md` — any outdated information?
+Classify each changed file by its *primary purpose*:
 
-Apply documentation fixes. These become the first commit.
-
-### Step A.3: Categorize Remaining Changes
-
-For each changed file, classify:
-
-| Category  | Prefix     | Examples                                      |
-|-----------|------------|-----------------------------------------------|
-| docs      | `docs:`    | README, AGENTS.md, docstrings, comments       |
-| feat      | `feat:`    | New feature, new endpoint, new capability      |
+| Category  | Prefix     | When to use                                    |
+|-----------|------------|------------------------------------------------|
+| docs      | `docs:`    | Documentation, docstrings, comments            |
+| feat      | `feat:`    | New feature, endpoint, or capability           |
 | fix       | `fix:`     | Bug fix, error handling, edge case             |
 | refactor  | `refactor:`| Restructure, rename, simplify (no behaviour change) |
-| chore     | `chore:`   | Deps, config, CI, tooling, version bumps       |
+| chore     | `chore:`   | Dependencies, config, CI, tooling              |
 | test      | `test:`    | Test additions or updates only                 |
 
-### Step A.4: Commit in Groups
+### A.4 — Commit in dependency order
 
-Commit each category as a separate commit. Order:
-1. `chore:` / `docs:` first (foundation)
-2. `refactor:` next
-3. `feat:` / `fix:` next (the substance)
-4. `test:` last
+1. `chore:` / `docs:` — foundation
+2. `refactor:` — clean structure
+3. `feat:` / `fix:` — substance
+4. `test:` — validation
 
-For each commit:
-1. `git add <category-files>`
-2. `git commit -m "<type>(<scope>): <description>"`
-3. Verify pre-commit hooks pass. If they fail, fix and amend.
+For each group: stage the files, write a conventional commit message with
+optional scope (`feat(auth): add OAuth2 login`), and verify pre-commit hooks
+pass. Fix and amend if hooks fail — never skip with `--no-verify` unless the
+user explicitly requests it.
 
-**Scope** is optional but recommended — use the module/component name
-(e.g., `feat(auth): add OAuth2 login flow`).
+### A.5 — Final check
 
-### Step A.5: Final Verification
-
-```bash
-git log --oneline -n <number-of-new-commits>
-git status   # must be clean
-```
+Review the new commits and confirm the working tree is clean.
 
 ---
 
 ## Workflow B: Version Release
 
-### Acceptance Criteria
+### B.1 — Determine bump type
 
-- All local commits pushed to remote (if push access confirmed)
-- Version bump type (major/minor/patch) identified from commit history
-- Every file referencing the current version updated to the new version
-- CHANGELOG updated with the new version entry
-- Annotated git tag created: `v<new-version>`
-- Tag pushed to remote (if push access)
+Read commits since the last tag. Classify the bump:
 
-### Core Principles
+| Commits contain...                   | Bump  |
+|--------------------------------------|-------|
+| BREAKING CHANGE, major API removal   | MAJOR |
+| At least one `feat:`                 | MINOR |
+| Only `fix:`, `docs:`, `chore:`, etc. | PATCH |
 
-**Semantic versioning is strict:**
-- **MAJOR** (`1.x` → `2.0`): breaking changes, API removals, major rewrites.
-  Rare — most releases are minor or patch.
-- **MINOR** (`1.x` → `1.x+1`): new features, new API surfaces, non-breaking
-  enhancements. Default for feature work.
-- **PATCH** (`1.x.y` → `1.x.y+1`): bug fixes, documentation, dependency
-  bumps, internal refactors with zero behavioural change.
+Semver is strict: MAJOR for breaking changes; MINOR for any new feature;
+PATCH for fixes, docs, deps, and internal-only changes. When uncertain,
+present the commits and ask the user.
 
-**Version references must be exhaustive.** When bumping, find every file that
-mentions the current version string and update it. Common locations:
-- `pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`
-- `plugin.yaml`, `__init__.py` `__version__`, `version.py`
-- `CHANGELOG.md`, `README.md`, `docs/`
+### B.2 — Find all version references
 
-**push is opt-in.** Always confirm push access before `git push`. If the user
-doesn't have remote push permissions, perform all local operations (commit,
-tag, version bump) and report what would be pushed.
+Use a two-pronged search:
 
-### Step B.1: Determine Bump Type
+1. **Literal string** — search the current version number across the project.
+   Catches inline references in README, docs, and config.
+2. **Structured fields** — search for `version =` in TOML/JSON, `__version__`
+   in Python, `version:` in YAML. Catches declarations that differ from the
+   literal string format.
 
-Read commits since the last tag:
+For each match, classify: **declaration** (must update) vs **historical
+reference** (must NOT touch). Present the list before editing.
 
-```bash
-git describe --tags --abbrev=0 2>/dev/null || echo "no previous tag"
-git log <last-tag>..HEAD --oneline   # or all commits if no previous tag
-```
+### B.3 — Update version + changelog
 
-Classify the bump:
+1. **Bump version files** — replace the old version only in declarations.
+2. **Update CHANGELOG** — prepend an entry derived from `git log`:
 
-| Commits contain...                            | Bump  |
-|-----------------------------------------------|-------|
-| BREAKING CHANGE, major refactor               | MAJOR |
-| At least one `feat:`                          | MINOR |
-| Only `fix:`, `docs:`, `chore:`, `refactor:`, `test:` | PATCH |
+   ```markdown
+   ## v<NEW> — <YYYY-MM-DD>
+   ### Added
+   - <features from feat: commits>
+   ### Changed
+   - <behavioural changes>
+   ### Fixed
+   - <fixes from fix: commits>
+   ```
 
-If uncertain, present the commits to the user and ask.
+   Include a full-changelog comparison link if the project has a GitHub URL.
+   Never delete old entries — the changelog is the complete release record.
 
-### Step B.2: Identify All Version References
+### B.4 — Commit and tag
 
-Search for the current version string across the project:
+Commit the version bump as `chore(release): bump version to v<NEW>`.
+Create an annotated tag: `v<NEW>` — always `v`-prefixed.
 
-```bash
-# Find the current version (from package manifest or existing tag)
-CURRENT=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
-# Search for it everywhere
-rg -l "$CURRENT" --type-not binary
-```
+### B.5 — Push (conditional)
 
-Also search for version variables:
+Confirm push access with the user, then push branch + tag. If push is denied
+or uncertain, complete all local operations and report what would be pushed.
 
-```bash
-rg 'version\s*=\s*"' pyproject.toml package.json Cargo.toml 2>/dev/null
-rg '__version__\s*=' --type py 2>/dev/null
-rg '"version":' package.json 2>/dev/null
-```
+### B.6 — Summary
 
-Map every file:line that needs updating. Distinguish:
-- **Version declarations** (must update): `version = "0.6.0"` in
-  `pyproject.toml`, `version: 0.6.0` in `plugin.yaml`
-- **Historical descriptions** (do NOT update): `v0.6.0 rewrote...` in docs,
-  changelog entries for past releases
-
-Present the list to the user before editing.
-
-### Step B.3: Update Version + Changelog
-
-1. **Bump version in all identified files** — replace the old version string
-   only in version declarations. For structured formats (`pyproject.toml`,
-   `package.json`), update the `version` field. For `__version__` strings,
-   update inline. Never touch historical descriptions.
-
-2. **Update CHANGELOG** — prepend a new entry:
-
-```markdown
-## v<NEW_VERSION> — <YYYY-MM-DD>
-
-### Added
-- <new features from feat: commits>
-
-### Changed
-- <behavioural changes>
-
-### Fixed
-- <bug fixes from fix: commits>
-
-[Full changelog](https://github.com/<org>/<repo>/compare/v<OLD>...v<NEW>)
-```
-
-Derive the changelog entries from `git log <old-tag>..HEAD --oneline`.
-
-### Step B.4: Commit Version Bump
-
-```bash
-git add -A
-git commit -m "chore(release): bump version to v<NEW_VERSION>"
-```
-
-### Step B.5: Create and Push Tag
-
-```bash
-git tag -a v<NEW_VERSION> -m "Release v<NEW_VERSION>"
-```
-
-Then confirm push access and push:
-
-```bash
-# Check remote
-git remote -v
-
-# If push access confirmed:
-git push origin HEAD
-git push origin v<NEW_VERSION>
-```
-
-If push access is unknown or denied, report: "Tag v<NEW_VERSION> created locally.
-No remote push — push manually when ready."
-
-### Step B.6: Final Report
-
-Present a release summary:
-
-```
-## Release v<NEW_VERSION>
-
-**Bump type:** <MAJOR|MINOR|PATCH> (<reason>)
-**Commits:** <N> commits from v<OLD>
-**Files updated:** <list>
-**Tag:** v<NEW_VERSION> (annotated)
-**Push:** ✅ pushed / ⚠️ local only
-```
+Report: bump type + reason, commit count, files updated, tag name, push status.
 
 ## Gotchas
 
-- **Never commit secrets.** Before every commit, verify `.env`, `.env.local`,
-  `credentials.json`, and similar files are in `.gitignore`. If they're
-  accidentally staged, `git reset HEAD <file>` and check `.gitignore`.
-- **Pre-commit hooks must pass.** If a hook fails, fix the issue and `git commit
-  --amend`. Never skip hooks with `--no-verify` unless the user explicitly
-  requests it for a specific, justified reason.
-- **Version search must be exhaustive.** `rg "$VERSION"` alone misses structured
-  formats where version appears in YAML/TOML/JSON fields keyed "version".
-  Search both the literal string AND the version field patterns.
-- **Semantic versioning is cumulative.** If `git log` shows 5 `feat:` commits
-  and 3 `fix:` commits, the bump is MINOR (feat dominates). A release always
-  takes the highest applicable bump level.
-- **Don't update historical descriptions.** `"v0.6.0 rewrote the architecture"`
-  in README.md is a historical fact, not a version declaration. Only update
-  the actual version fields.
-- **CHANGELOG is the release record.** Every release adds one section at the
-  top. Never delete old entries. The changelog must tell the complete story
-  of every version that shipped.
-- **Empty commits are rejected.** If Workflow A has no changes, report it and
-  skip. If Workflow B has no commits since the last tag, ask the user whether
-  they intended to release without changes.
-- **Push is a separate confirmation.** Even if `git remote -v` shows a remote,
-  don't assume the user wants to push. Always confirm — especially for
-  projects where the remote might be a fork or read-only mirror.
-- **Tag names are always `v`-prefixed.** `v1.2.3`, not `1.2.3`. Consistent
-  with Go modules, GitHub Releases, and 95% of the ecosystem.
+- **Cumulative semver is absolute.** A single `feat:` anywhere in the commit
+  range forces MINOR — even if every other commit is a fix.
+- **Historical version references must survive.** "v0.6.0 introduced X" in
+  docs stays forever. Update only structured version declarations.
+- **`v`-prefix is mandatory.** Tags are `v1.2.3`, never `1.2.3`.
+- **Empty state is an error, not a no-op.** If Workflow A finds no changes,
+  stop and report it. If Workflow B finds no commits since the last tag, ask
+  whether the user intended to release.
+- **Secrets check before every commit.** Verify `.env`, `.env.local`,
+  `credentials.json` are in `.gitignore`. If a secret file is accidentally
+  staged, unstage it and fix `.gitignore` — never proceed with secrets in the
+  index.
+- **Pre-commit hooks are blocking.** Never skip hooks with `--no-verify`
+  unless the user explicitly requests it with justification.
