@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.8.0 — 2026-07-21
+
+### Added
+
+- **`jovaltus` core skill** (pipeline, entry-point): defines the full 10-phase
+  Jovaltus software development pipeline and smart entry-point routing. Agent
+  analyzes user prompt maturity to skip completed phases — vague idea →
+  `discuss`, complete requirements → write PRD → `design`, requirements +
+  technical plan → write PRD + design.md → `to-spec`. Later phases run
+  sequentially.
+
+### Changed
+
+- **Skill optimization**: compressed `manage-git-repo` and `simplify` skill
+  frontmatter descriptions for token efficiency (-47% bytes each).
+- Bundled skills: 13 → 14 (10 pipeline + 4 utility)
+
 ## v0.7.0 — 2026-07-21
 
 ### Added
