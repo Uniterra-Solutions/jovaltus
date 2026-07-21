@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.8.1 — 2026-07-21
+
+### Changed
+
+- **`to-tasks` skill v0.3.0 — complete vertical slice decomposition**: each task
+  now bundles its own implementation + tests + full referenced code context
+  (zero external lookups needed). Tests ALWAYS travel with implementation
+  (hard rule, never split). READ files get full content inlined, not just
+  file paths. Tasks intentionally larger (30-60 min) to eliminate cross-worktree
+  coordination. Specs → tasks is condensation, not 1:1 mapping. Added "Owns
+  Tests" column to manifest and "Referenced Code" section to task template.
+
 ## v0.8.0 — 2026-07-21
 
 ### Added
