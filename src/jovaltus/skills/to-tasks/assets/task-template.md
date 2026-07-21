@@ -1,19 +1,20 @@
 # Task {{ID}}: {{Task Name}}
 
-> **Estimated effort:** {{15-30 min}}
+> **Estimated effort:** {{30-60 min}} — complete vertical slice, self-contained
 > **Depends on:** {{logical dependency info — informational only, does not block execution}}
 >   {{e.g., "T1 produces jwt.py (contract inlined below) — T3 codes against contract"}}
 
 ## File Ownership
 
-_Every file below is owned EXCLUSIVELY by this task. No other task touches these files._
+_Every file below is owned EXCLUSIVELY by this task. No other task touches these files.
+Tests for implementation files are ALWAYS owned by this same task — never split out._
 
 | Action | Path | Description |
 |--------|------|-------------|
 | CREATE | `{{src/auth/register.py}}` | {{Registration endpoint handler}} |
 | EDIT | `{{src/auth/__init__.py}}` | {{Register the new route}} |
-| CREATE | `{{tests/auth/test_register.py}}` | {{Tests for registration}} |
-| READ | `{{src/models/user.py}}` | {{Existing user model — read for context, do not modify}} |
+| CREATE | `{{tests/auth/test_register.py}}` | {{Tests for registration — same task as implementation}} |
+| READ | `{{src/models/user.py}}` | {{Existing user model — full content inlined in Referenced Code below}} |
 
 ## Interface Contracts
 
@@ -36,15 +37,36 @@ _These are the contracts this task promises. Other tasks will inline these._
 | {{Registration handler}} | `POST /api/auth/register` — body: `{email, password, name}` → `{user_id, token}` |
 | {{...}} | {{...}} |
 
+## Referenced Code
+
+_Full source (or key excerpts) of every file marked READ in the ownership table.
+The subagent needs this to understand existing patterns, conventions, and data
+shapes before writing any code. Copy-paste the actual file content — don't just
+reference the path. The subagent reads THIS inline context, not the file on disk._
+
+### `{{src/models/user.py}}`
+
+```python
+{{Full content of user.py — the subagent reads THIS to understand the model}}
+```
+
+### `{{src/config.py}}` (key excerpts)
+
+```python
+{{Only the relevant parts — database URL, secret key config, etc.}}
+```
+
 ## Specification
 
-{{FULL spec content inline. Copy-paste from specs/<spec-file>.md.
-Do NOT reference or link. The subagent reads THIS, not the original.}}
+{{FULL spec content inline. Copy-paste from ALL relevant spec files that this
+task covers. Multiple specs can condense into one task. Do NOT reference or
+link. The subagent reads THIS, not the originals.}}
 
 ---
 
-{{Spec content starts here — objective, requirements, acceptance criteria,
-data shapes, boundaries, edge cases, out of scope — everything.}}
+{{All spec content — objective, requirements, acceptance criteria,
+data shapes, boundaries, edge cases, out of scope — everything from
+every spec file that this task covers.}}
 
 ## Design Excerpts
 
@@ -110,8 +132,8 @@ Extract from AGENTS.md, CLAUDE.md, or equivalent.}}
 
 ```bash
 {{Exact command that proves this task is complete. Must work in isolation —
-no other tasks' code needs to exist. If the command imports code from
-another task, create a lightweight stub that matches the interface contract.}}
+no other tasks' code needs to exist. Tests for this task's code are already
+owned by this task, so the verification command runs them directly.}}
 
 # Example:
 cd /path/to/worktree
@@ -133,5 +155,4 @@ tests/auth/test_register.py::test_missing_fields PASSED
 
 - {{Any context the subagent needs that doesn't fit above.}}
 - {{e.g. "The user model migration already exists — only add the endpoint."}}
-- {{e.g. "If the verification imports from a module that doesn't exist yet
-  (owned by another task), create a minimal stub that matches the contract."}}
+- {{e.g. "Tests are owned by this task — include them in file ownership and write them alongside implementation."}}
