@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   version releases with automatic version-reference updates, changelog
   maintenance, and annotated tag creation.
 
+- **`simplify` skill** (pipeline, post-execute): dispatches simplification
+  subagents into all executed worktrees in parallel. Three risk tiers (SAFE /
+  CAREFUL / RISKY) with behaviour preservation as the inviolable rule. Runs
+  after execute, before review.
+
 ### Changed
 
 - Bundled skills: 12 → 13 (9 pipeline + 4 utility)
