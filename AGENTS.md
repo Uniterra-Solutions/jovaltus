@@ -23,9 +23,9 @@
 - `src/jovaltus/__init__.py` — Plugin entry point: self-bootstraps fabricium, delegates to `HermesPlugin`
 - `src/jovaltus/plugin.yaml` — Plugin metadata (name, version, description)
 - `src/jovaltus/SOUL.md` — Agent identity file applied during `hermes jovaltus setup`
-- `src/jovaltus/skills/` — 11 bundled agent skills (8 pipeline + 3 utility):
-  - **Pipeline**: `discuss` → `design` → `to-spec` → `to-tasks` → `to-environment` → `execute` → `review` + `qa`
-  - **Utility**: `agentic-debugging`, `manage-agents-md`, `project-documentation`
+- `src/jovaltus/skills/` — 13 bundled agent skills (9 pipeline + 4 utility):
+  - **Pipeline**: `discuss` → `design` → `to-spec` → `to-tasks` → `to-environment` → `execute` → `simplify` → `review` + `qa`
+  - **Utility**: `agentic-debugging`, `manage-agents-md`, `project-documentation`, `manage-git-repo`
 - `tests/` — 39 pytest tests across 4 test files + conftest
   - `test_git_utils.py` (18), `test_sync.py` (8)
   - `integration/test_cli.py` (8), `evals/test_jovaltus_skills.py` (4)
@@ -44,7 +44,7 @@ handlers; it bundles agent skills that guide the orchestrator through each phase
 ## Pipeline (Skill-Driven)
 
 ```
-discuss → design → to-spec → to-tasks → to-environment → execute → (review + merge)
+discuss → design → to-spec → to-tasks → to-environment → execute → simplify → (review + merge)
 ```
 
 All tasks run in parallel (flat architecture) — file ownership is proven disjoint.
