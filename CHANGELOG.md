@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.8.2 — 2026-07-22
+
+### Changed
+
+- **Optimized skill frontmatter descriptions** for better trigger coverage:
+  `agentic-debugging` (broader bug/error/crash triggers), `jovaltus` (all
+  non-trivial SE tasks), `manage-agents-md` (all agent spec files, not just
+  AGENTS.md), `manage-git-repo` (added git action keywords), and
+  `project-documentation` (added documentation trigger keywords).
+
 ## v0.8.1 — 2026-07-21
 
 ### Changed
