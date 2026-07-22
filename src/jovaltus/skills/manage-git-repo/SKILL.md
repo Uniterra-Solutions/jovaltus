@@ -1,10 +1,13 @@
 ---
 name: manage-git-repo
 description: >-
-  Structured git commits grouped by change category and semantic version
-  releases with changelog + annotated tags. Use when user asks to commit,
-  release, bump version, or 提交/發布. Do NOT use for single-file quick
-  commits, CI/CD pipeline setup, or non-git releases (npm publish, PyPI).
+  Git repository management: commit changes, bump versions, create
+  semantic-version releases with changelogs and annotated tags, push
+  to remotes. Use when the user asks to commit, push, tag, release,
+  bump a version, write a changelog, or manage a git repository
+  (提交, 發布, 推送, 版本, 標籤, 合併, git). NOT for: single-file
+  quick commits, CI/CD pipeline setup, or non-git releases (npm
+  publish, PyPI, Docker).
 author: LaiTszKin
 version: 0.2.0
 metadata:

@@ -1,18 +1,15 @@
 ---
 name: jovaltus
 description: >
-  Core Jovaltus workflow. Smart entry-point routing: analyzes user prompt
-  maturity to skip completed phases (vague idea → discuss, detailed
-  requirements → write PRD → design, requirements + technical plan →
-  write PRD + design.md → to-spec). Later phases run sequentially.
-  LOAD when:
-  - User describes a new project/feature to build
-  - User says "I want to build..." / "幫我整..." / "寫一個..."
-  - User asks "how does Jovaltus work?" or provides a PRD/spec
-  Do NOT use for:
-  - Existing codebase bugs, debugging, refactoring (→ agentic-debugging)
-  - Code review or QA on already-built systems
-  - Single-file scripts or trivial one-shot changes
+  Smart entry-point router for all software engineering tasks. Analyzes
+  the user's prompt maturity and routes to the correct Jovaltus pipeline
+  phase (discuss → design → to-spec → to-tasks → execute → review → qa),
+  skipping phases the user has already prepared. Use when the user asks to
+  build, create, implement, add features, refactor, or do any non-trivial
+  software engineering work (開發, 幫我整, 寫一個, 做一個, 加功能, build,
+  create, implement, feature, refactor). NOT for: bug fixes or debugging
+  (→ agentic-debugging), trivial single-function changes, one-line edits,
+  or code review on already-built systems.
 author: LaiTszKin
 version: 0.1.0
 metadata:

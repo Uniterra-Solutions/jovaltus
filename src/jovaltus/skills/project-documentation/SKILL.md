@@ -1,12 +1,14 @@
 ---
 name: project-documentation
 description: >-
-  Generates a multi-file docs/ tree from a codebase: architecture diagrams,
-  per-module deep dives, API reference, conventions, data models, setup,
-  testing, and workflow recipes. Supports incremental updates via git diff.
-  Prefer this for full-project documentation suites. Do NOT use for
-  single-file README updates, one-line project summaries, standalone
-  AGENTS.md/CLAUDE.md generation, or trivial single-file scripts.
+  Generate a structured multi-file docs/ tree from any codebase:
+  architecture diagrams, per-module deep dives, API reference, conventions,
+  data models, setup, testing, and workflow recipes — with Mermaid diagrams
+  and incremental git-diff updates. Use when the user asks to document a
+  project, generate documentation, write docs, or create project wiki
+  (寫文檔, 生成文檔, 項目文檔, documentation). NOT for: single README
+  updates, one-line summaries, AGENTS.md/CLAUDE.md generation, or trivial
+  single-file scripts.
 author: LaiTszKin
 version: 0.1.0
 metadata:

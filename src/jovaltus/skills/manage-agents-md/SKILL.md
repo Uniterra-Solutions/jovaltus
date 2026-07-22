@@ -1,18 +1,14 @@
 ---
 name: manage-agents-md
 description: >-
-  Create, audit, update, and maintain AGENTS.md files in programming projects.
-
-  LOAD when:
-  - User asks to create, review, improve, or update an AGENTS.md
-  - User asks "is my AGENTS.md good?" or "how do I write AGENTS.md?"
-  - User wants to audit an existing AGENTS.md against best practices or fix a
-    specific issue (stale commands, missing sections, vague conventions)
-
-  DO NOT load when:
-  - User asks about README.md, CONTRIBUTING.md, or general documentation
-  - User asks about CLAUDE.md in isolation (no mention of AGENTS.md alongside it)
-  - User asks about .cursorrules or other tool-specific configs
+  Create, audit, update, and maintain project specification files that
+  guide AI coding agents: AGENTS.md, CLAUDE.md, .cursorrules,
+  .windsurfrules, and similar agent context files. Use when the user
+  asks to create, review, improve, or audit agent spec files, wants to
+  manage project convention files, or asks about coding rules for AI
+  agents (項目規範文件, agent context, coding guidelines, project rules).
+  NOT for: README.md, CONTRIBUTING.md, general project documentation, or
+  writing docs/ content.
 
 author: LaiTszKin
 version: 0.1.0

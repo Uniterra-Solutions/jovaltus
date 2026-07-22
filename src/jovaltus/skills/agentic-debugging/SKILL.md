@@ -1,13 +1,14 @@
 ---
 name: agentic-debugging
 description: >-
-  5-phase evidence-driven debugging for agent-authored code bugs. Phases:
-  (1) reproduce deterministically, (2) trace data-flow to root cause,
-  (3) rank 3–5 falsifiable hypotheses, (4) apply one minimal fix,
-  (5) verify with repro + full suite. Triggers: test failures, bug
-  reports, self-inflicted regressions. NOT for: feature requests,
-  greenfield work, or helping humans debug their own code (→ use
-  systematic-debugging).
+  Evidence-driven debugging for bugs, errors, crashes, test failures,
+  regressions, and unexpected output. Use when something is broken, not
+  working as expected, or producing wrong results — or when the user
+  reports a bug, asks to debug/fix an error, or discovers a regression.
+  Triggers: bug, error, crash, exception, failure, regression, broken,
+  not working, wrong output, unexpected behavior, debug, fix. NOT for:
+  feature requests, greenfield development, code review, or assisting a
+  human who drives the debugging (→ use systematic-debugging).
 author: LaiTszKin
 version: 0.2.0
 metadata:
