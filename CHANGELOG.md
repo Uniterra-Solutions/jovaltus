@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.9.1 — 2026-07-23
+
+### Fixed
+
+- **`jovaltus` skill trigger coverage.** The skill's frontmatter description
+  previously excluded bug fixes and trivial changes (`NOT for: bug fixes or
+  debugging, trivial single-function changes`), causing the agent to skip the
+  skill for tasks that should have gone through the pipeline. Replaced with a
+  universal trigger ("always load first") and added **Phase 0: Triage** — an
+  explicit Direct-vs-Pipeline checklist that routes trivial changes straight
+  to implementation while everything else enters the pipeline. The model no
+  longer guesses what's "trivial"; the skill decides.
+
 ## v0.9.0 — 2026-07-23
 
 ### Changed
