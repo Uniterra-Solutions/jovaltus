@@ -1,17 +1,16 @@
 ---
 name: jovaltus
 description: >
-  Smart entry-point router for all software engineering tasks. Analyzes
-  the user's prompt maturity and routes to the correct Jovaltus pipeline
-  phase (discuss → design → to-spec → to-tasks → execute → review → qa),
-  skipping phases the user has already prepared. Use when the user asks to
-  build, create, implement, add features, refactor, or do any non-trivial
-  software engineering work (開發, 幫我整, 寫一個, 做一個, 加功能, build,
-  create, implement, feature, refactor). NOT for: bug fixes or debugging
-  (→ agentic-debugging), trivial single-function changes, one-line edits,
-  or code review on already-built systems.
+  Universal entry point for ALL software engineering tasks — always trigger
+  first. From one-line fixes to full feature builds: the skill internally
+  classifies the task and either fast-passes to direct implementation
+  (trivial changes) or routes through the Jovaltus pipeline. Trigger on
+  ANY code-related request: build, create, implement, add, remove, rename,
+  fix, debug, refactor, change, update, write, edit, 開發, 幫我整, 寫,
+  改, 加功能, 修復. Never skip this skill for software engineering work —
+  it decides whether you need the pipeline, not the model.
 author: LaiTszKin
-version: 0.1.0
+version: 0.2.0
 metadata:
   jovaltus:
     tags: [pipeline, workflow, orchestration, entry-point, core]
@@ -32,11 +31,13 @@ are the contract.
 
 ## Acceptance Criteria
 
-- Entry point determined in one pass — no back-and-forth
+- Triage decision (Direct vs Pipeline) made in one pass — no back-and-forth
+- For Direct: change applied immediately, no pipeline documents created
+- For Pipeline: entry point determined in one pass — no back-and-forth
 - User confirmed the entry point before proceeding
 - PRD and design.md written non-interactively when inputs are already complete
 - User reviews each document before the pipeline continues
-- Uncertain classification → default to `discuss` (conservative fallback)
+- Uncertain classification → default to Pipeline (conservative fallback)
 
 ## Core Principles
 
@@ -49,6 +50,45 @@ phase you're starting from; let them correct. A conservative classification
 a design doc the user already had in mind).
 
 ## Workflow
+
+### Phase 0: Triage — Direct or Pipeline?
+
+**This is the most important decision.** Before counting domains, classify the
+task into one of two buckets. If uncertain, default to Pipeline.
+
+**Direct (skip pipeline — just do it):**
+
+The change is trivial AND unambiguous. You can describe the entire change in
+one sentence with no missing information.
+
+| Signal | Examples |
+|---|---|
+| Bug fix with known root cause | "Fix the off-by-one in `paginate()` at line 42" |
+| Rename a symbol | "Rename `getUser` to `get_user` in `auth.py`" |
+| Fix lint/type/format error | "Fix the mypy error on line 15" |
+| One-line or single-expression change | "Change the default timeout from 30 to 60" |
+| Config change (one field) | "Add `pool_size=10` to the DB config" |
+| Simple refactor (extract helper) | "Extract the retry loop into `retry_with_backoff()`" |
+| Add a test for existing code | "Add a unit test for the edge case in `parse_date`" |
+| User says "just do it" / "直接改" / "不用走流程" | Obey immediately |
+
+**If Direct:** Tell the user 「呢個係 direct change，唔洗走 pipeline，直接改。」
+Then proceed immediately — no documents, no phases, no confirmations. Just fix it.
+
+**Pipeline (route through jovaltus):**
+
+Any change that is NOT in the Direct table above. Heuristics:
+
+- New features or capabilities
+- Multi-file changes (>2 files)
+- Architecture or API design changes
+- Data model changes
+- >50 lines of new code
+- Unknown root cause (needs investigation first)
+- User explicitly asks to plan/design/spec
+- **Uncertain → Pipeline** (conservative default — one confirmation costs less than redoing work)
+
+**If Pipeline:** Continue to Phase 1.
 
 ### Phase 1: Scan the Prompt
 
@@ -108,9 +148,10 @@ Wait for confirmation. If they disagree, adjust.
 After the entry point, the remaining phases run sequentially. After each
 phase, offer the natural next step. No further routing needed.
 
-## Fast-Path Rules
+## Pipeline Fast-Path Rules
 
-Override normal classification when the signal is unambiguous:
+Override normal pipeline-phase classification when the signal is unambiguous
+(these apply AFTER Phase 0 has decided "Pipeline"):
 
 - **User provides a PRD file/link** → verify, ask: design or to-spec next?
 - **User provides PRD + design doc** → skip to to-spec
