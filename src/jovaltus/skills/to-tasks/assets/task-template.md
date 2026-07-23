@@ -1,8 +1,6 @@
 # Task {{ID}}: {{Task Name}}
 
 > **Estimated effort:** {{30-60 min}} — complete vertical slice, self-contained
-> **Depends on:** {{logical dependency info — informational only, does not block execution}}
->   {{e.g., "T1 produces jwt.py (contract inlined below) — T3 codes against contract"}}
 
 ## File Ownership
 
@@ -15,27 +13,6 @@ Tests for implementation files are ALWAYS owned by this same task — never spli
 | EDIT | `{{src/auth/__init__.py}}` | {{Register the new route}} |
 | CREATE | `{{tests/auth/test_register.py}}` | {{Tests for registration — same task as implementation}} |
 | READ | `{{src/models/user.py}}` | {{Existing user model — full content inlined in Referenced Code below}} |
-
-## Interface Contracts
-
-### From Other Tasks (What This Task Needs)
-
-_These are the contracts other tasks promise to fulfill. Code against these signatures — the real implementations will exist when all tasks merge._
-
-| From Task | What | Contract |
-|-----------|------|----------|
-| {{T1}} | {{JWT creation}} | `def create_token(user_id: UUID) -> str` — returns signed JWT string |
-| {{T2}} | {{User model}} | `class User(BaseModel): id: UUID, email: str, name: str` |
-| {{...}} | {{...}} | {{...}} |
-
-### Exported (What This Task Produces for Others)
-
-_These are the contracts this task promises. Other tasks will inline these._
-
-| What | Contract |
-|------|----------|
-| {{Registration handler}} | `POST /api/auth/register` — body: `{email, password, name}` → `{user_id, token}` |
-| {{...}} | {{...}} |
 
 ## Referenced Code
 
@@ -110,8 +87,6 @@ Extract from AGENTS.md, CLAUDE.md, or equivalent.}}
 - Follow existing naming conventions in touched files
 - Add type annotations for all new functions
 - Write tests alongside implementation
-- Create stub/mock implementations for interface contracts from other tasks
-  if the verification command needs them to compile/import
 
 ### Needs Approval
 
@@ -124,7 +99,6 @@ Extract from AGENTS.md, CLAUDE.md, or equivalent.}}
 - Commit secrets, API keys, or .env files
 - Edit generated code or vendor directories
 - Delete or weaken existing tests
-- Change the public API of exported functions without updating the contract
 - Touch any file not listed in File Ownership above
 - Modify any file marked as READ
 

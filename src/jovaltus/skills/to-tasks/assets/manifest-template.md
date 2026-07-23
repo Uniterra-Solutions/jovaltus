@@ -39,34 +39,6 @@ _Every file belongs to exactly one task. Every test file owned by the same task 
 
 ---
 
-## Interface Contract Map
-
-_Every cross-task dependency has an inlined contract. No task reads another task's output at runtime._
-
-| Producer | Exports | Consumer | Contract Inlined In Consumer's TASK.md |
-|----------|---------|----------|----------------------------------------|
-| {{T1}} | `create_token(user_id) -> str` | {{T3}} | ✅ task-{{t3}}-{{slug}}.md |
-| {{T1}} | `POST /api/auth/register` shape | {{T4}} | ✅ task-{{t4}}-{{slug}}.md |
-| {{T2}} | `authenticate(email, password) -> User` | {{T3}} | ✅ task-{{t3}}-{{slug}}.md |
-| {{T3}} | `User` model class | {{T1}}, {{T2}} | ✅ task-{{t1}}, task-{{t2}} |
-| {{...}} | ... | ... | ... |
-
-**Validation:** {{M}} cross-task dependencies, {{M}} inlined contracts → ✅ fully covered.
-
----
-
-## Dependency Graph (Informational)
-
-_Logical relationships only. Does NOT constrain execution order — all tasks run in parallel._
-
-```
-T1 (register, jwt) ──→ T3 (middleware) ──→ T5 (integration)
-                             ↗
-T2 (login, session) ──→ T4 (profile) ────┘
-```
-
----
-
 ## Execution Status
 
 _Updated by the `execute` skill during execution._

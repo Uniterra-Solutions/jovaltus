@@ -55,6 +55,12 @@ you can't specify the exact behavior, the requirement isn't ready.
 **One spec = one agent session.** Completions in 15-30 min. If longer,
 split further.
 
+**Logically independent, not just file-independent.** A spec must be
+verifiable in complete isolation. Its acceptance criteria must pass without
+any other spec being implemented first. If Spec B's verification needs code
+from Spec A, they are the SAME spec — merge them. No spec references another
+spec's output, interface, or data shape. Each spec is a closed system.
+
 **Out of Scope prevents agent "helpfulness".** Agents love refactoring
 adjacent code and adding "nice to have" features. An explicit DO NOT
 TOUCH list is the most underrated section in any spec.
@@ -80,9 +86,10 @@ Each spec covers five areas:
 
 ### Phase 1: Scope the Spec Set
 
-Read PRD + design. Propose spec breakdown — which features are independent
-(parallel spec) vs dependent (sequential specs). Present list to user,
-get confirmation.
+Read PRD + design. Propose spec breakdown. **Every spec is an independent,
+parallel unit.** If two features depend on each other at the implementation
+level, they belong in the SAME spec — never split across specs. Present list
+to user, get confirmation.
 
 ### Phase 2: Write Each Spec
 
@@ -92,9 +99,8 @@ add specificity. Write GWT criteria; write verification command.
 
 ### Phase 3: Cross-Spec Validation
 
-Check: every P0/P1 covered, dependency order correct, no two specs edit
-same file (unless sequential), file ownership doesn't conflict. Present
-to user for sign-off.
+Check: every P0/P1 covered, no two specs CREATE/EDIT the same file, file
+ownership doesn't conflict. Present to user for sign-off.
 
 ### Phase 4: Write to Disk
 

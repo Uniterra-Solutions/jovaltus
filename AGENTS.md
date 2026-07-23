@@ -48,7 +48,8 @@ jovaltus (core) → discuss → design → to-spec → to-tasks → to-environme
 ```
 
 All tasks run in parallel (flat architecture) — file ownership is proven disjoint.
-Cross-task dependencies resolved via inlined interface contracts in TASK.md.
+Every task is a closed, logically independent system: no task imports from or
+depends on another task's output.
 
 ## CLI Commands
 

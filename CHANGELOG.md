@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.9.0 — 2026-07-23
+
+### Changed
+
+- **Removed all dependency language from `to-spec` and `to-tasks` skills.**
+  The pipeline now enforces **logical independence**: every task is a closed
+  system that owns everything it imports, verifies in complete isolation, and
+  never references another task's output. Removed: spec dependency
+  classification, interface contracts (both directions), dependency graph,
+  contract map, cross-task import workarounds (stubs, sequential waves, lazy
+  registration). Added explicit independence gating: if a subagent thinks
+  "Task B needs X from Task A", the split is automatically wrong — merge them.
+
 ## v0.8.2 — 2026-07-22
 
 ### Changed

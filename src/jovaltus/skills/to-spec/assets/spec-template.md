@@ -2,7 +2,6 @@
 
 > **PRD:** `.plan/{{DD-MM-YYYY}}/{{name}}/prd.md`
 > **Design:** `.plan/{{DD-MM-YYYY}}/{{name}}/design.md`
-> **Depends on:** {{spec filenames this task requires, or "None"}}
 
 ## Objective
 
