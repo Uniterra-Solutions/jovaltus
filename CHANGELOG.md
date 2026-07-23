@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.9.2 — 2026-07-23
+
+### Changed
+
+- **`review` skill optimized for token efficiency and correctness.**
+  Fixed critical subagent self-containment bug — the 4-layer adversarial
+  checklist is now embedded via `cat references/review-checklist.md` instead
+  of directing the subagent to load a file it cannot access. Description
+  rewritten as user-facing action statement with Chinese trigger keywords
+  (代碼審查, 檢查代碼). Merge workflow moved to reference file. 37% token
+  reduction.
+
+- **`to-environment` skill optimized with project documentation awareness.**
+  Added Phase 3: Identify Project Documentation — maps project docs to source
+  files per task so subagents receive architectural context without noise.
+  Description expanded with Chinese trigger keywords (建立環境, 創建worktree).
+  Removed verbose model-knows commands. 37% token reduction.
+
 ## v0.9.1 — 2026-07-23
 
 ### Fixed
