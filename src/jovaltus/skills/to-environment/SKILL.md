@@ -1,21 +1,16 @@
 ---
 name: to-environment
 description: >
-  Creates isolated git worktrees for each task in the manifest with
-  sparse-checkout scoped to only the files that task needs. For brownfield
-  projects, performs blast-radius analysis to include affected files.
-  Each worktree is a self-contained environment ready for subagent execution.
-  Produces worktrees under .worktrees/.
-  LOAD when:
-  - Task manifest exists at .plan/<date>/<name>/tasks/manifest.md
-  - User says "setup worktrees" or "create environments" or "to-environment"
-  - Ready to spawn parallel subagents from the task manifest
-  Do NOT use for:
-  - Creating tasks or specs (use to-spec, to-tasks)
-  - Running subagents — this only creates the environments
-  - Single-branch sequential work
+  Create isolated git worktrees for each task in the manifest. Each
+  worktree contains only what the subagent needs: relevant source code,
+  related project documentation (for architectural context), and the
+  task file. Everything else is excluded via sparse-checkout.
+  Use when: setup worktrees, create environments, to-environment,
+  建立環境, 創建worktree, 設置隔離環境, 準備開發環境.
+  NOT for: creating tasks or specs (use to-spec/to-tasks), running
+  subagents (this only creates environments), single-branch work.
 author: LaiTszKin
-version: 0.1.1
+version: 0.3.0
 metadata:
   jovaltus:
     tags: [worktree, environment, isolation, parallel, sparse-checkout]
@@ -25,82 +20,106 @@ metadata:
 
 ## Goal
 
-Create one isolated git worktree per task. Each worktree contains only the
-files that task needs — zero unrelated noise. For brownfield projects,
-blast-radius analysis pulls in every file affected by the planned changes.
+Create one isolated git worktree per task. Each worktree is the subagent's
+entire world: source code it touches, project docs that explain those files,
+and the task file. Unrelated code and docs are excluded.
 
 ## Acceptance Criteria
 
-- One worktree per task, each on its own branch `agent/<id>-<slug>`
-- Sparse-checkout scoped to: task files (CREATE/EDIT), blast-radius dependents,
-  project config files needed for verification
-- Zero file-write conflicts across worktrees (enforced by disjoint file ownership)
-- Each worktree is self-contained: subagent can read TASK.md + run verification
+- One worktree per task on branch `agent/<id>-<slug>`
+- Sparse-checkout includes only: CREATE/EDIT source files, related project
+  docs, and config needed for the verification command
+- Unrelated source code and unrelated project docs excluded
+- Zero file-write conflicts (disjoint file ownership)
+- Each worktree self-contained: `TASK.md` + code context from docs + runnable
+  verification
 
 ## Core Principles
 
-**Minimal surface area.** The worktree contains exactly what the task needs.
-This reduces token consumption and prevents accidental edits. Include the
-task's CREATE/EDIT files, dependent files (blast radius), and the config
-files needed for the verification command.
+**What the subagent needs, nothing else.** Three things go in: (1) the task
+file, (2) source code the task touches (CREATE/EDIT + blast-radius dependents),
+(3) project docs that explain those source files. Nothing else.
 
-**Blast radius for brownfield.** When a task edits existing files, find every
-file that imports them — transitively. Those dependents may break. Include
-them. For greenfield (all CREATE), blast radius is unnecessary.
+**Docs give context, not noise.** A subagent with only `TASK.md` reinvents
+architecture. A subagent with every doc in `docs/` drowns. Map docs to
+source files — include only what explains the files the task touches.
 
-**One branch per task.** `agent/<id>-<slug>`. Isolates commits, makes review
-trivial (one PR per task), enables clean teardown.
+**One branch per task.** `agent/<id>-<slug>`. Clean commits, trivial review,
+clean teardown.
 
 ## Workflow
 
-### Phase 1: Parse Manifest
+### Phase 1: Read All Task Files
 
-Extract task IDs, slugs, file ownership (CREATE/EDIT/READ), verification
-commands from `manifest.md`.
+Read every task from the manifest. Extract per task: ID, slug, description,
+CREATE list, EDIT list, READ list, verification command.
 
-### Phase 2: Build File Sets Per Task
+### Phase 2: Map Source ↔ Task Relationships
 
-For each task, determine what files the sparse-checkout includes:
+For each task, determine which source files are relevant:
 
-1. **Always**: the task file (copied as TASK.md), project config needed for
-   verification (pyproject.toml, package.json, etc.)
-2. **CREATE**: parent directories of all new files
-3. **EDIT**: each file's exact path + its dependents (blast radius)
-4. **Blast radius (brownfield only)**: for every EDIT file, find all files
-   that import it using `rg "from <module> import|import <module>" --files-with-matches`.
-   Include transitive dependents and their test files. Exclude generated files
-   (dist/, build/), vendor deps, and unrelated files in same directory.
-5. **Greenfield shortcut**: if no EDIT files, just include CREATE dirs + config.
+1. **CREATE**: parent directories of all new files
+2. **EDIT**: exact paths of modified files
+3. **Blast radius (brownfield only)**: for each EDIT file, find all files
+   that import it transitively. Exclude generated files, vendor deps, and
+   unrelated files. Skip for greenfield (no EDITs).
+4. **Config**: `pyproject.toml`, `package.json`, `conftest.py` — whatever
+   the verification command needs.
 
-### Phase 3: Create Worktrees
+### Phase 3: Identify Project Documentation
 
-For each task: `git worktree add .worktrees/<id>-<slug> -b agent/<id>-<slug>`,
-enable cone-mode sparse-checkout with the file set directories. Copy the task
-file to `TASK.md` in the worktree root. See `assets/worktree-config.md` for
-exact git syntax.
+For each task's source files, find project docs that give subagents context:
 
-### Phase 4: Validate
+1. Scan for: `docs/`, `README.md`, `ARCHITECTURE.md`, `CONVENTIONS.md`,
+   `AGENTS.md`, `CLAUDE.md`, `.cursorrules`
+2. Map docs to source files — use ripgrep to find docs mentioning each
+   module the task touches
+3. Filter by relevance: auth docs for auth task, not payment task
+4. Always include: `AGENTS.md`/`CLAUDE.md` (conventions apply to all tasks)
 
-Smoke test each worktree: TASK.md present, EDIT files exist, config files
-present, no files from other same-wave tasks. Present summary to user.
+### Phase 4: Build Sparse-Checkout Sets
+
+For each task, assemble the directory set:
+
+```
+Task <id>-<slug>
+├── TASK.md               (copied from manifest)
+├── Source code            (Phase 2: CREATE dirs + EDIT files + blast radius)
+├── Config                 (Phase 2: pyproject.toml, conftest.py, etc.)
+└── Project docs           (Phase 3: relevant docs only)
+```
+
+Validate: no cross-task source leakage, no unrelated docs, verification
+command can run.
+
+### Phase 5: Create Worktrees
+
+For each task: create worktree on branch `agent/<id>-<slug>`, enable
+cone-mode sparse-checkout with the Phase 4 directory set, copy task file
+to `TASK.md`. See `assets/worktree-config.md` for exact syntax.
+
+### Phase 6: Validate
+
+Smoke test each worktree: `TASK.md` present, source files accessible, docs
+present, config present, no cross-task leakage. Present summary table: task
+ID, slug, branch, file count, verification status.
 
 ## Gotchas
 
-- **Cone mode only accepts directories.** If you need a single file from a
-  large directory, include the parent directory. The token cost of extra files
-  is negligible compared to non-cone mode complexity.
-- **Worktree cleanup.** After subagents finish: `git worktree remove .worktrees/<dir>`.
-  Stale metadata: `git worktree prune`.
-- **Branch name uniqueness.** Two tasks get different branches (`agent/1-t1-*`,
-  `agent/1-t2-*`). Never reuse names.
-- **Config files enable `pytest` / `npm test`.** If the verification command
-  needs `pyproject.toml` (pytest config) or `conftest.py`, include them.
-- **Blast radius tools are optional.** `rg` with import patterns is sufficient
-  for most projects.
-- **Don't overthink `.git`.** It's always present in a worktree. Sparse-checkout
-  only affects the working tree.
+- **Documentation relevance is load-bearing.** Missing `ARCHITECTURE.md` =
+  subagent reinvents patterns. All 50 docs = subagent drowns. Be surgical.
+- **AGENTS.md / CLAUDE.md / .cursorrules apply to all tasks.** Include them
+  in every worktree regardless of which source files the task touches.
+- **Cone mode only accepts directories.** For single-file needs in large
+  directories, include the parent directory.
+- **Worktree cleanup after subagents finish:** `git worktree remove` then
+  `git worktree prune`. Use `--force` only when worktree holds stale locks.
+- **Branch names must be unique.** `agent/1-t1-auth`, `agent/1-t2-payment`.
+  Never reuse names in the same wave.
+- **Config files enable verification.** If `pytest` needs `pyproject.toml`
+  or `conftest.py`, include them — not the whole project config surface.
 
 ## References
 
-- `assets/worktree-config.md` — Exact git worktree + sparse-checkout syntax.
-  Load on demand when creating or managing worktrees.
+- `assets/worktree-config.md` — Git worktree + sparse-checkout syntax, blast
+  radius discovery patterns (Python and JS/TS). Load for exact commands.
