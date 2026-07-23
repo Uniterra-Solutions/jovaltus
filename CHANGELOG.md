@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.9.3 — 2026-07-23
+
+### Fixed
+
+- **`manage-git-repo` SKILL.md YAML frontmatter parsing bug.**
+  Added explicit blank line between multiline `description` and `author`
+  fields — without it, the parser incorrectly merges the two into a single
+  malformed value.
+
 ## v0.9.2 — 2026-07-23
 
 ### Changed
