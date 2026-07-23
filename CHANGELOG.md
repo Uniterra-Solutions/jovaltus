@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.10.0 — 2026-07-23
+
+### Added
+
+- **`simplify` Direct Changes mode.** Two-mode architecture: Workflow
+  (parallel subagents per worktree, unchanged) and Direct Changes
+  (single subagent, main agent provides change scope + original requirements
+  + implementation plan for simple post-change cleanup). Shared principles
+  extracted to top for both modes.
+- **`review` Direct Changes mode.** Same two-mode pattern applied to
+  adversarial code review. Direct Changes mode dispatches a single subagent
+  with change scope + requirements, applying the full 4-layer adversarial
+  checklist to only the changed files.
+
+### Changed
+
+- **`simplify` optimised 44%** — fixed subagent self-containment bug
+  (Workflow brief referenced orchestrator-only Shared Principles); removed
+  pedagogical explanations of concepts frontier models already know;
+  compressed subagent briefs to trigger-word checklists with risk tags.
+- **`review` optimised 54%** — compressed 4-layer adversarial checklist
+  from ~150 lines of textbook to actionable trigger bullets in subagent
+  briefs; removed Mode Selection table (redundant with description triggers).
+
 ## v0.9.3 — 2026-07-23
 
 ### Fixed
