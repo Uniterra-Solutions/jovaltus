@@ -1,6 +1,7 @@
-# Task {{ID}}: {{Task Name}}
+# Task {{ID}}: {{Task Name}}{{  [Batch {{N}}]}}
 
 > **Estimated effort:** {{30-60 min}} — complete vertical slice, self-contained
+{{> **Batch:** {{N}} — depends on prior batch output (see Referenced Code for interfaces)}}
 
 ## File Ownership
 
@@ -20,6 +21,11 @@ _Full source (or key excerpts) of every file marked READ in the ownership table.
 The subagent needs this to understand existing patterns, conventions, and data
 shapes before writing any code. Copy-paste the actual file content — don't just
 reference the path. The subagent reads THIS inline context, not the file on disk._
+
+{{For batch 2+ tasks, also inline key excerpts from prior-batch files this task
+depends on — class signatures, function signatures, type definitions, import
+paths. The subagent implements against these interfaces; the actual code will be
+merged into its worktree by execute before the subagent runs.}}
 
 ### `{{src/models/user.py}}`
 
