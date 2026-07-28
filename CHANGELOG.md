@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.11.0 — 2026-07-28
+
+### Added
+
+- **`to-tasks` two-mode task decomposition.** Fully Parallel mode (default)
+  keeps existing disjoint-file behavior. Batch Execution mode (fallback)
+  groups tasks into sequential batches when genuine cross-task dependencies
+  cannot be eliminated via merging, restructuring, or lazy registration.
+  New Phase 0 assesses mode before building the file ownership map.
+- **`execute` batch dispatch with inter-batch merge.** Batch loop: rebase
+  worktrees onto integration branch → dispatch batch tasks in parallel →
+  wait all → merge into integration → next batch. Failed batch tasks block
+  downstream dependents automatically.
+- **Manifest template** now supports mode declaration, Batch + Depends On
+  columns, cross-batch file overlap documentation, and batch dependency
+  graph visualization.
+
+### Changed
+
+- **`to-tasks` Core Principles** softened from hard "no cross-task
+  dependencies" to a decision tree: merge → restructure → lazy registration
+  → batch mode (last resort).
+- **`to-environment` gotcha** added confirming batch mode does not change
+  worktree setup.
+- **Docs** (`architecture.md`, `workflows.md`, `project-structure.md`)
+  updated to reflect parallel + batch execution model.
+
 ## v0.10.0 — 2026-07-23
 
 ### Added
