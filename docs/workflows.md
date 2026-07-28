@@ -29,9 +29,9 @@ Step-by-step recipes for common development tasks.
 2. Load `discuss` skill → elicit requirements → produce `prd.md`
 3. Load `design` skill → challenge every decision → produce `design.md`
 4. Load `to-spec` skill → translate to implementation specs
-5. Load `to-tasks` skill → decompose into flat, independent tasks
+5. Load `to-tasks` skill → decompose into independent tasks (parallel or batch mode)
 6. Load `to-environment` skill → create isolated worktrees
-7. Load `execute` skill → dispatch subagents in parallel
+7. Load `execute` skill → dispatch subagents (parallel or batch per manifest)
 8. Load `review` skill → adversarial review per worktree → merge
 9. Load `qa` skill → PRD-driven acceptance testing
 

@@ -36,7 +36,7 @@ src/jovaltus/
     ├── to-spec/         # PRD → specs (SKILL.md + assets/spec-template.md)
     ├── to-tasks/        # Specs → flat tasks (SKILL.md + assets/manifest + task templates)
     ├── to-environment/  # Worktree setup (SKILL.md + assets/worktree-config.md)
-    ├── execute/         # Parallel dispatch (SKILL.md)
+    ├── execute/         # Parallel + batch dispatch (SKILL.md)
     ├── review/          # Adversarial review (SKILL.md + references/review-checklist.md)
     ├── qa/              # PRD-driven QA (SKILL.md + references/app-type-examples.md)
     ├── agentic-debugging/      # Evidence-driven debugging (SKILL.md)

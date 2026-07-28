@@ -68,9 +68,9 @@ guidance, produces the artifact, then loads the next skill.
 | 1 | `discuss` | User idea | `prd.md` | No |
 | 2 | `design` | PRD | `design.md` | No |
 | 3 | `to-spec` | PRD + design | Implementation specs | No |
-| 4 | `to-tasks` | Specs | Manifest + task files | No |
+| 4 | `to-tasks` | Specs | Manifest + task files (parallel or batch mode) | No |
 | 5 | `to-environment` | Manifest | Git worktrees | No |
-| 6 | `execute` | Worktrees | Implemented code | Yes (parallel) |
+| 6 | `execute` | Worktrees | Implemented code | Yes (parallel or batch) |
 | 7 | `review` | Implemented code | Reviewed + merged code | Yes (per worktree) |
 | 8 | `qa` | Merged code | QA report | Yes |
 
