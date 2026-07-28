@@ -26,14 +26,16 @@ Step-by-step recipes for common development tasks.
 ## Running the Full Pipeline
 
 1. Start Hermes: `hermes -p jovaltus-agent`
-2. Load `discuss` skill → elicit requirements → produce `prd.md`
-3. Load `design` skill → challenge every decision → produce `design.md`
-4. Load `to-spec` skill → translate to implementation specs
-5. Load `to-tasks` skill → decompose into independent tasks (parallel or batch mode)
-6. Load `to-environment` skill → create isolated worktrees
-7. Load `execute` skill → dispatch subagents (parallel or batch per manifest)
-8. Load `review` skill → adversarial review per worktree → merge
-9. Load `qa` skill → PRD-driven acceptance testing
+2. `jovaltus` skill auto-loads → triage: Direct / Utility / Pipeline
+3. Load `discuss` skill → elicit requirements → produce `prd.md`
+4. Load `design` skill → challenge every decision → produce `design.md`
+5. Load `to-spec` skill → translate to implementation specs
+6. Load `to-tasks` skill → decompose into independent tasks (parallel or batch mode)
+7. Load `to-environment` skill → create isolated worktrees
+8. Load `execute` skill → dispatch subagents (parallel or batch per manifest)
+9. Load `simplify` skill → simplify code without changing behaviour
+10. Load `review` skill → adversarial review per worktree → merge
+11. Load `qa` skill → PRD-driven acceptance testing
 
 ## Running Tests During Development
 

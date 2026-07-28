@@ -3,7 +3,7 @@
 | Directory | Responsibility | Key Files |
 |-----------|---------------|-----------|
 | `src/jovaltus/` | Plugin source — entry point + bundled skills | `__init__.py`, `plugin.yaml`, `SOUL.md` |
-| `src/jovaltus/skills/` | 11 bundled Hermes skills (8 pipeline + 3 utility) | 11 `SKILL.md` files + references/assets |
+| `src/jovaltus/skills/` | 14 bundled Hermes skills (10 pipeline + 4 utility) | 14 `SKILL.md` files + references/assets |
 | `tests/` | Pytest suite (39 tests) | `conftest.py`, `test_git_utils.py`, `test_sync.py` |
 | `tests/integration/` | CLI integration tests | `test_cli.py`, `conftest.py` |
 | `tests/evals/` | Docker-based pipeline evaluation | `test_jovaltus_skills.py`, `tasks.py`, `rubrics.py` |
@@ -30,18 +30,21 @@ src/jovaltus/
 ├── __init__.py      # 55 lines — fabricium bootstrap + HermesPlugin delegation
 ├── plugin.yaml      # Plugin metadata (no provides_tools — skill-driven)
 ├── SOUL.md          # Agent identity (45 lines)
-└── skills/          # 11 skills, each a self-contained directory
+└── skills/          # 14 skills, each a self-contained directory
+    ├── jovaltus/         # Core router: triage + pipeline entry (SKILL.md)
     ├── discuss/         # Requirements → PRD (SKILL.md + assets/prd-template.md)
     ├── design/          # Technical design (SKILL.md + assets/design-template.md)
     ├── to-spec/         # PRD → specs (SKILL.md + assets/spec-template.md)
     ├── to-tasks/        # Specs → flat tasks (SKILL.md + assets/manifest + task templates)
     ├── to-environment/  # Worktree setup (SKILL.md + assets/worktree-config.md)
     ├── execute/         # Parallel + batch dispatch (SKILL.md)
+    ├── simplify/        # Code simplification (SKILL.md)
     ├── review/          # Adversarial review (SKILL.md + references/review-checklist.md)
     ├── qa/              # PRD-driven QA (SKILL.md + references/app-type-examples.md)
     ├── agentic-debugging/      # Evidence-driven debugging (SKILL.md)
     ├── manage-agents-md/       # AGENTS.md management (SKILL.md + references/)
-    └── project-documentation/  # Docs generation (SKILL.md + references/ + templates/)
+    ├── project-documentation/  # Docs generation (SKILL.md + references/ + templates/)
+    └── manage-git-repo/        # Git commit, version, release (SKILL.md)
 ```
 
 ## Test Layout

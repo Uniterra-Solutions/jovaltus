@@ -1,6 +1,6 @@
 # Architecture — Jovaltus
 
-Jovaltus is a Hermes plugin that bundles 11 agent skills for a complete
+Jovaltus is a Hermes plugin that bundles 14 agent skills for a complete
 development pipeline. The plugin itself is minimal (~55 lines of Python);
 all behavior is defined in skill documents.
 
@@ -31,7 +31,7 @@ their guidance to drive the development pipeline.
 
 ```mermaid
 graph TD
-    Orch[Orchestrator] -->|skill_view| Skills[Bundled Skills 11x]
+    Orch -->|skill_view| Skills[Bundled Skills 14x]
     Orch -->|terminal bg| Sub[Subagent]
     Sub -->|git| WT[Worktree]
     Fabricium[Fabricium SDK] -->|HermesPlugin| CLI[CLI Commands]
@@ -41,7 +41,7 @@ graph TD
 
 | Container | Technology | Purpose |
 |-----------|-----------|---------|
-| Bundled Skills | Markdown (SKILL.md) | 11 self-contained skill documents — pipeline phases + utilities |
+| Bundled Skills | Markdown (SKILL.md) | 14 self-contained skill documents — pipeline phases + utilities |
 | Orchestrator | Hermes agent | Loads skills, spawns subagents, controls pipeline flow |
 | Subagent Process | Hermes `terminal(background=true)` | Isolated execution in worktree; implements, reviews, tests |
 | Fabricium SDK | `fabricium` pkg | `git_utils`, `HermesPlugin` (CLI + skill auto-discovery), `SkillEvalHarness` |
@@ -50,7 +50,7 @@ graph TD
 ## Pipeline Flow (Skill-Driven)
 
 ```
-discuss → design → to-spec → to-tasks → to-environment → execute → (review + merge → qa)
+jovaltus (core) → discuss → design → to-spec → to-tasks → to-environment → execute → simplify → review → qa
 ```
 
 The orchestrator loads one skill at a time. Each skill describes:
@@ -65,14 +65,16 @@ guidance, produces the artifact, then loads the next skill.
 
 | Phase | Skill | Input | Output | Subagents? |
 |-------|-------|-------|--------|------------|
+| 0 | `jovaltus` | User request | Routing decision (Direct / Utility / Pipeline) | No |
 | 1 | `discuss` | User idea | `prd.md` | No |
 | 2 | `design` | PRD | `design.md` | No |
 | 3 | `to-spec` | PRD + design | Implementation specs | No |
 | 4 | `to-tasks` | Specs | Manifest + task files (parallel or batch mode) | No |
 | 5 | `to-environment` | Manifest | Git worktrees | No |
 | 6 | `execute` | Worktrees | Implemented code | Yes (parallel or batch) |
-| 7 | `review` | Implemented code | Reviewed + merged code | Yes (per worktree) |
-| 8 | `qa` | Merged code | QA report | Yes |
+| 7 | `simplify` | Implemented code | Simplified code (behaviour preserved) | Yes |
+| 8 | `review` | Simplified code | Reviewed + merged code | Yes (per worktree) |
+| 9 | `qa` | Merged code | QA report | Yes |
 
 ### Parallel Execution Model
 
