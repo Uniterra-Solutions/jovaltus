@@ -10,10 +10,10 @@ description: >
   NOT for: creating tasks or specs (use to-spec/to-tasks), running
   subagents (this only creates environments), single-branch work.
 author: LaiTszKin
-version: 0.3.0
+version: 0.3.1
 metadata:
   jovaltus:
-    tags: [worktree, environment, isolation, parallel, sparse-checkout]
+    tags: [worktree, environment, isolation, parallel, sparse-checkout, batch]
 ---
 
 # To Environment
@@ -118,6 +118,11 @@ ID, slug, branch, file count, verification status.
   Never reuse names in the same wave.
 - **Config files enable verification.** If `pytest` needs `pyproject.toml`
   or `conftest.py`, include them — not the whole project config surface.
+- **Batch mode does not change worktree setup.** In batch execution, all
+  worktrees are still created upfront with the same sparse-checkout logic.
+  The `execute` skill handles inter-batch merges — batch 2+ worktrees
+  receive prior-batch code via `git merge`, not during worktree creation.
+  Batch mode affects execution order, not environment provisioning.
 
 ## References
 
