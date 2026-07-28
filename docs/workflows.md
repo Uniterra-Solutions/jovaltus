@@ -84,6 +84,20 @@ git commit --no-verify -m "..."
 2. Restart Hermes to reload skills (or use `skill_view()` which reads from disk)
 3. Test with a small task to verify behavior
 
+## Creating a Branch + PR from Changes (Workflow C)
+
+Use the `manage-git-repo` skill's Workflow C to create a semantic branch, batch-commit, and open a PR in one flow:
+
+1. Load `manage-git-repo` skill
+2. Follow Workflow C steps:
+   - C.1: Pre-flight (auth, index, base branch)
+   - C.2: Determine branch name from changed files (`feat/slug`, `fix/slug`, etc.)
+   - C.3: `git checkout -b <branch-name>`
+   - C.4: Batch-commit using Workflow A's dependency order (docs → refactor → feat/fix → test)
+   - C.5: `git push -u origin HEAD`
+   - C.6: Create PR via `gh pr create` (or curl fallback)
+3. The PR body is derived from commit messages — ensure commits tell a clear story
+
 ## Debugging a Subagent
 
 1. Check the worktree log: `git -C .worktrees/<task>/ log --oneline`

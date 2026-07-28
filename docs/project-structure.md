@@ -44,7 +44,7 @@ src/jovaltus/
     ├── agentic-debugging/      # Evidence-driven debugging (SKILL.md)
     ├── manage-agents-md/       # AGENTS.md management (SKILL.md + references/)
     ├── project-documentation/  # Docs generation (SKILL.md + references/ + templates/)
-    └── manage-git-repo/        # Git commit, version, release (SKILL.md)
+    └── manage-git-repo/        # Git commit, version, release, branch+PR (SKILL.md)
 ```
 
 ## Test Layout
