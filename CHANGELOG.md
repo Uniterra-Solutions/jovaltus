@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.12.0 — 2026-07-28
+
+### Added
+
+- **`manage-git-repo` Workflow C — Branch + Batch Commit + PR.** New end-to-end
+  workflow that creates a semantic branch from changed files, batch-commits in
+  dependency order (docs → refactor → feat/fix → test), and opens a pull request
+  via `gh` CLI or curl fallback. Branch names are automatically derived from
+  change analysis (`feat/slug`, `fix/slug`, etc.).
+
+### Changed
+
+- **`manage-git-repo` skill bumped to 0.3.0.** Frontmatter updated to reflect
+  new PR workflow capability. Skill now covers 3 independent workflows: Commit,
+  Version Release, and Branch+PR.
+- **Docs updated.** `docs/workflows.md` gained a recipe for Workflow C;
+  `docs/project-structure.md` updated manage-git-repo description.
+
 ## v0.11.1 — 2026-07-28
 
 ### Changed
