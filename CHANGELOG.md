@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.11.1 — 2026-07-28
+
+### Changed
+
+- **`jovaltus` skill now routes to all 14 bundled skills.** Phase 0 triage
+  expanded from two buckets (Direct / Pipeline) to three (Direct / Utility /
+  Pipeline). New Bucket 2 covers non-pipeline utility skills: `agentic-debugging`
+  (bugs, errors, unexpected behavior), `manage-agents-md` (project convention
+  files), `project-documentation` (docs/ tree generation), and `manage-git-repo`
+  (commit, release, version management).
+- **Pipeline flow updated in docs.** `docs/architecture.md`,
+  `docs/project-structure.md`, and `docs/workflows.md` now reflect the full
+  14-skill pipeline: `jovaltus` (core router) → `simplify` phase, plus
+  expanded phase reference tables.
+
+---
+
 ## v0.11.0 — 2026-07-28
 
 ### Added
