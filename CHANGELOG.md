@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.13.1 — 2026-07-31
+
+### Changed
+
+- **Skill frontmatter simplified to `name` + `description` only.** All 14
+  bundled skills dropped the deprecated `author`, `version`, and `metadata`
+  YAML fields per the updated Hermes skill format. Reduced frontmatter noise
+  improves agent skill reading.
+- **Cantonese normalized to written Chinese in `jovaltus` skill.** Trigger
+  phrases and example messages converted (幫我整→幫我做, 唔洗走流程→
+  不用走流程, 呢個係→這是, 覆蓋咗需求嘅→已覆蓋需求的, 唔 work→
+  不 work, 行為唔啱→行為不對).
+- **Docs updated.** Skill count corrected from 11 → 14 in `README.md` and
+  `docs/README.md` (pipeline chain now includes `simplify`, utility count
+  3 → 4); `docs/workflows.md` frontmatter example updated; `docs/conventions.md`
+  frontmatter convention updated; `docs/modules/plugin-entry.md` plugin.yaml
+  example version refreshed.
+
 ## v0.13.0 — 2026-07-31
 
 ### Added
