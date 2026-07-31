@@ -84,19 +84,41 @@ git commit --no-verify -m "..."
 2. Restart Hermes to reload skills (or use `skill_view()` which reads from disk)
 3. Test with a small task to verify behavior
 
-## Creating a Branch + PR from Changes (Workflow C)
+## Creating a Branch + PR from Changes
 
-Use the `manage-git-repo` skill's Workflow C to create a semantic branch, batch-commit, and open a PR in one flow:
+Use the `manage-git-repo` skill to create branches, commit, and open PRs:
 
+- **Workflow C (single PR):** For changes with ≤ 3 commits that fit in one reviewable PR.
+  Load `manage-git-repo` skill and follow Workflow C steps (C.1–C.7) to create a semantic
+  branch, batch-commit, and open a single pull request.
+
+- **Workflow D (stacked PR):** For multi-commit changes (4+ commits, or 2–3 distinct layers).
+  Load `manage-git-repo` skill and follow Workflow D steps (D.1–D.8) to create a stack of
+  dependent PRs via `gh stack`. Each commit becomes its own reviewable layer; the whole
+  stack merges in one click.
+
+Workflow C example:
 1. Load `manage-git-repo` skill
 2. Follow Workflow C steps:
    - C.1: Pre-flight (auth, index, base branch)
    - C.2: Determine branch name from changed files (`feat/slug`, `fix/slug`, etc.)
    - C.3: `git checkout -b <branch-name>`
-   - C.4: Batch-commit using Workflow A's dependency order (docs → refactor → feat/fix → test)
+   - C.4: Batch-commit using Workflow A's dependency order
    - C.5: `git push -u origin HEAD`
    - C.6: Create PR via `gh pr create` (or curl fallback)
-3. The PR body is derived from commit messages — ensure commits tell a clear story
+3. PR body is derived from commit messages — ensure commits tell a clear story
+
+Workflow D example:
+1. Load `manage-git-repo` skill
+2. Run Workflow A first to categorize and commit changes
+3. Follow Workflow D steps:
+   - D.1: Verify `gh stack` extension installed
+   - D.2: Classify commits into stack layers
+   - D.3: `gh stack init <first-branch>`
+   - D.4: `gh stack add <branch>` + `git cherry-pick <hash>` for each layer
+   - D.5: `gh stack view` to verify
+   - D.6: `gh stack push` + `gh stack submit`
+4. Merge with `gh stack merge --yes --squash` when reviews are approved
 
 ## Debugging a Subagent
 
