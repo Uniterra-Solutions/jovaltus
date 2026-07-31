@@ -14,11 +14,6 @@ description: >
   - Code review, debugging, or refactoring
   - Technical architecture without product context
   - Specific how-to questions about an existing codebase
-author: LaiTszKin
-version: 0.1.1
-metadata:
-  jovaltus:
-    tags: [requirements, planning, prd, discovery, product]
 ---
 
 # Requirements Discovery

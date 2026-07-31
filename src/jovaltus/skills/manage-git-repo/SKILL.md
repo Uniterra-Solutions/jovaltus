@@ -11,11 +11,6 @@ description: >-
   NOT for: single-file quick commits, CI/CD pipeline setup, or
   non-git releases (npm publish, PyPI, Docker).
   
-author: LaiTszKin
-version: 0.4.0
-metadata:
-  jovaltus:
-    tags: [git, commit, release, semver, versioning, changelog, tag, branch, pr, pull-request, stacked-prs]
 ---
 
 # Manage Git Repo

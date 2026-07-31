@@ -15,11 +15,6 @@ description: >
   - Requirements gathering (use discuss)
   - Code review of existing implementation
   - Choosing between two libraries (spike/research task)
-author: LaiTszKin
-version: 0.1.1
-metadata:
-  jovaltus:
-    tags: [design, architecture, technical-review, dialectical, planning]
 ---
 
 # Technical Design

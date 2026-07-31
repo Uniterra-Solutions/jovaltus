@@ -9,11 +9,6 @@ description: >-
   (寫文檔, 生成文檔, 項目文檔, documentation). NOT for: single README
   updates, one-line summaries, AGENTS.md/CLAUDE.md generation, or trivial
   single-file scripts.
-author: LaiTszKin
-version: 0.1.0
-metadata:
-  jovaltus:
-    tags: [documentation, codebase-analysis, architecture, onboarding]
 ---
 
 ## Goal

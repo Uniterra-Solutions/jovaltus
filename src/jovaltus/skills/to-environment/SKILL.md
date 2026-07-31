@@ -9,11 +9,6 @@ description: >
   建立環境, 創建worktree, 設置隔離環境, 準備開發環境.
   NOT for: creating tasks or specs (use to-spec/to-tasks), running
   subagents (this only creates environments), single-branch work.
-author: LaiTszKin
-version: 0.3.1
-metadata:
-  jovaltus:
-    tags: [worktree, environment, isolation, parallel, sparse-checkout, batch]
 ---
 
 # To Environment

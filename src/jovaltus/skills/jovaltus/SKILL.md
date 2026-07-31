@@ -8,14 +8,9 @@ description: >-
   pipeline (discuss → design → to-spec → to-tasks → to-environment → execute
   → simplify → review → qa). Trigger on ANY code-related request: build,
   create, implement, add, remove, rename, fix, debug, refactor, change,
-  update, write, edit, commit, release, document, 開發, 幫我整, 寫, 改,
+  update, write, edit, commit, release, document, 開發, 幫我做, 寫, 改,
   加功能, 修復, 提交, 發布, 寫文檔. Never skip this skill for software
   engineering work — it decides the routing, not the model.
-author: LaiTszKin
-version: 0.3.0
-metadata:
-  jovaltus:
-    tags: [pipeline, workflow, orchestration, entry-point, core, routing]
 ---
 
 # Jovaltus — Core Router
@@ -68,9 +63,9 @@ sentence with no missing information. No skill loaded, no pipeline, no documents
 | Config change (one field) | "Add `pool_size=10` to the DB config" |
 | Simple refactor (extract helper) | "Extract the retry loop into `retry_with_backoff()`" |
 | Add a test for existing code | "Add a unit test for the edge case in `parse_date`" |
-| User says "just do it" / "直接改" / "唔洗走流程" | Obey immediately |
+| User says "just do it" / "直接改" / "不用走流程" | Obey immediately |
 
-**If Direct:** Tell the user 「呢個係 direct change，唔洗走 pipeline，直接改。」
+**If Direct:** Tell the user 「這是 direct change，不用走 pipeline，直接改。」
 Then proceed — no documents, no phases, no confirmations.
 
 ### Bucket 2: Utility Skill — standalone workflow
@@ -141,7 +136,7 @@ exists, skip writing it (handles resume-after-interruption).
 
 Tell the user what you found (match conversation language):
 
-> 你覆蓋咗需求嘅 X/8 領域，技術方案 Y/10 領域。我建議由 **Z** 開始。OK？
+> 你已覆蓋需求的 X/8 領域，技術方案 Y/10 領域。我建議由 **Z** 開始。OK？
 
 Wait for confirmation. If they disagree, adjust.
 
@@ -202,7 +197,7 @@ matches, load the skill directly — no pipeline documents, no phase sequencing.
 
 | Skill | Use when user says... | Core workflow |
 |---|---|---|
-| `agentic-debugging` | "呢個有 bug" / "fix the crash" / "test is failing" / "唔 work" / "行為唔啱" | Reproduce → Locate → Hypothesize → Fix → Verify. Bounded to 3 loop iterations; Rule of Three escalation for structural bugs. Also applies to unexpected behavior (非預期行為). |
+| `agentic-debugging` | "這個有 bug" / "fix the crash" / "test is failing" / "不 work" / "行為不對" | Reproduce → Locate → Hypothesize → Fix → Verify. Bounded to 3 loop iterations; Rule of Three escalation for structural bugs. Also applies to unexpected behavior (非預期行為). |
 | `manage-agents-md` | "create AGENTS.md" / "audit project rules" / "update .cursorrules" / "更新項目規範" | Scan project → write 6-section file → self-audit → drift-check every command. Handles AGENTS.md, CLAUDE.md, .cursorrules, .windsurfrules. |
 | `project-documentation` | "generate docs for this project" / "幫我寫文檔" / "document the codebase" | Scan → Analyze (deep-read modules) → Generate 11-file docs/ tree → Verify with audit. Supports incremental git-diff updates. |
 | `manage-git-repo` | "commit" / "push" / "release" / "bump version" / "tag" / "changelog" / "管理 git repo" | Two independent workflows: Commit (group → order → pre-commit → verify) and Release (determine bump → update versions → changelog → tag → push with confirmation). |

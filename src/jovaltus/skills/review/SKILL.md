@@ -11,11 +11,6 @@ description: >
   quality gate.
   NOT for: unimplemented code, casual checklist reviews, merge conflict
   resolution, pre-implementation design review.
-author: LaiTszKin
-version: 0.5.0
-metadata:
-  jovaltus:
-    tags: [review, adversarial, code-review, quality, merge, cleanup, direct]
 ---
 
 # Review

@@ -15,11 +15,6 @@ description: >
   - Creating tasks or worktrees (use to-tasks, to-environment)
   - Running a single task manually
   - Tasks without manifest + worktrees already prepared
-author: LaiTszKin
-version: 0.3.0
-metadata:
-  jovaltus:
-    tags: [execution, subagent, worktree, parallel, dispatch, batch, merge]
 ---
 
 # Execute

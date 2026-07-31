@@ -9,11 +9,6 @@ description: >-
   not working, wrong output, unexpected behavior, debug, fix. NOT for:
   feature requests, greenfield development, code review, or assisting a
   human who drives the debugging (→ use systematic-debugging).
-author: LaiTszKin
-version: 0.2.0
-metadata:
-  jovaltus:
-    tags: [debugging, agent-workflow, verification, root-cause, self-correction]
 ---
 
 ## Goal

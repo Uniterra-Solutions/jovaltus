@@ -15,11 +15,6 @@ description: >
   - Unit or integration testing (that's review phase)
   - Testing before all worktrees are merged
   - Performance or load testing
-author: LaiTszKin
-version: 0.1.1
-metadata:
-  jovaltus:
-    tags: [qa, acceptance, testing, prd-driven]
 ---
 
 # QA

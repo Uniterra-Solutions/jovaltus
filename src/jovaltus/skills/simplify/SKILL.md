@@ -10,11 +10,6 @@ description: >
   clean up / refactor / 簡化 a direct change.
   NOT for: unimplemented code, feature changes, behavioural modifications,
   or full-codebase refactors.
-author: LaiTszKin
-version: 0.3.0
-metadata:
-  jovaltus:
-    tags: [simplify, cleanup, refactor, worktree, parallel, subagent, direct]
 ---
 
 # Simplify

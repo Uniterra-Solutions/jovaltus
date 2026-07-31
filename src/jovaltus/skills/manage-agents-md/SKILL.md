@@ -10,11 +10,6 @@ description: >-
   NOT for: README.md, CONTRIBUTING.md, general project documentation, or
   writing docs/ content.
 
-author: LaiTszKin
-version: 0.1.0
-metadata:
-  jovaltus:
-    tags: [documentation, agent-context, code-quality, standards, project-setup]
 ---
 
 # AGENTS.md Manager

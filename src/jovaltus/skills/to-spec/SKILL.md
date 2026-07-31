@@ -14,11 +14,6 @@ description: >
   - Technical design decisions (use design)
   - Writing code directly — this produces specs, not code
   - Creating task work packages (use to-tasks)
-author: LaiTszKin
-version: 0.1.1
-metadata:
-  jovaltus:
-    tags: [implementation, spec, tasks, agent-executable, planning]
 ---
 
 # Implementation Spec

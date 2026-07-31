@@ -20,11 +20,6 @@ description: >
   - Writing specs (use to-spec)
   - Writing code directly
   - Tasks where file-level independence is impossible
-author: LaiTszKin
-version: 0.4.0
-metadata:
-  jovaltus:
-    tags: [orchestration, tasks, subagent, parallel, worktree, independent, batch]
 ---
 
 # To Tasks
