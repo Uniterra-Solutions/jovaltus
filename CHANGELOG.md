@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.13.0 — 2026-07-31
+
+### Added
+
+- **`manage-git-repo` Workflow D — Stacked PR.** New workflow for creating
+  stacked pull requests via GitHub's native Stacked PRs feature (`gh stack`).
+  Triggered when a PR involves multiple commits (4+, or 2–3 distinct layers).
+  Each commit becomes its own reviewable PR layer; the whole stack merges in
+  one click via `gh stack merge`. Covers extension installation, layer
+  classification, cherry-pick distribution, submit, and atomic merge.
+
+### Changed
+
+- **`manage-git-repo` skill bumped to 0.4.0.** Description updated to cover
+  stacked PRs; tags now include `stacked-prs`. Skill now covers 4 independent
+  workflows: Commit, Version Release, Branch+PR, and Stacked PR.
+- **Docs updated.** `docs/workflows.md` gained a recipe for Workflow D (stacked
+  PR) alongside Workflow C (single PR). `docs/project-structure.md` updated
+  manage-git-repo description.
+
 ## v0.12.0 — 2026-07-28
 
 ### Added
