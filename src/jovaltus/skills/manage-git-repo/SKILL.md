@@ -3,25 +3,26 @@ name: manage-git-repo
 description: >-
   Git repository management: commit changes, bump versions, create
   semantic-version releases with changelogs and annotated tags, push
-  to remotes, create semantic branches, batch-commit, and open pull
-  requests. Use when the user asks to commit, push, tag, release,
-  bump a version, write a changelog, manage a git repository, create
-  a branch from changes, open a PR (提交, 發布, 推送, 版本, 標籤,
-  合併, PR, git). NOT for: single-file quick commits, CI/CD pipeline
-  setup, or non-git releases (npm publish, PyPI, Docker).
+  to remotes, create semantic branches, batch-commit, open pull
+  requests, and create stacked PRs for multi-commit changes. Use
+  when the user asks to commit, push, tag, release, bump a version,
+  write a changelog, manage a git repository, create a branch from
+  changes, open a PR (提交, 發布, 推送, 版本, 標籤, 合併, PR, git).
+  NOT for: single-file quick commits, CI/CD pipeline setup, or
+  non-git releases (npm publish, PyPI, Docker).
   
 author: LaiTszKin
-version: 0.3.0
+version: 0.4.0
 metadata:
   jovaltus:
-    tags: [git, commit, release, semver, versioning, changelog, tag, branch, pr, pull-request]
+    tags: [git, commit, release, semver, versioning, changelog, tag, branch, pr, pull-request, stacked-prs]
 ---
 
 # Manage Git Repo
 
 ## Goal
 
-Three independent workflows for git housekeeping:
+Four independent workflows for git housekeeping:
 
 - **Workflow A — Commit:** Group working-tree changes by category and commit
   them in logical order (docs → refactor → feat/fix → test). Every commit
@@ -34,11 +35,20 @@ Three independent workflows for git housekeeping:
 
 - **Workflow C — Branch + Batch Commit + PR:** Create a semantic branch from
   current changes, batch-commit them using Workflow A's categorization, push
-  the branch, and open a pull request. Use when the user says "create a PR,"
-  "開 PR," "提交 PR," or asks to branch/commit/PR in one flow.
+  the branch, and open a single pull request. Use when the user says "create a
+  PR," "開 PR," "提交 PR," or asks to branch/commit/PR in one flow — and the
+  change fits in one reviewable PR (typically ≤ 3 commits).
+
+- **Workflow D — Stacked PR:** Create a stack of dependent pull requests where
+  each layer is one focused commit, using GitHub's native Stacked PRs feature
+  (`gh stack`). Use when the user asks to create a PR AND the change involves
+  **multiple commits** (4+ commits, or 2–3 commits that each represent a
+  distinct logical layer). Each commit becomes its own reviewable PR; the
+  whole stack merges in one click.
 
 Workflows are independent — commit without releasing, release an
-already-committed state, or branch+PR without releasing.
+already-committed state, branch+PR without releasing, or stack a multi-commit
+change.
 
 ## Core Principles
 
@@ -333,6 +343,153 @@ Report:
 - Whether the PR is a draft
 - Base branch targeted
 
+---
+
+## Workflow D: Stacked PR
+
+Stacked PRs (GitHub public preview, July 2026) break a multi-commit change
+into a chain of small, dependent pull requests. Each layer is one focused
+commit — reviewers see only that layer's diff. The whole stack merges in one
+click via `gh stack merge`.
+
+**Trigger:** User asks to create a PR AND there are multiple commits (4+, or
+2–3 commits that each represent a distinct logical layer — e.g., refactor
+then feature then test).
+
+**Prerequisite:** The `gh stack` CLI extension must be installed. It requires
+`gh` ≥ 2.90.0 and Git ≥ 2.20.
+
+### D.1 — Pre-flight checks
+
+Same as C.1, plus verify the `gh stack` extension:
+
+```bash
+# Check gh version
+gh --version | head -1
+
+# Install the extension if missing
+if ! gh extension list 2>/dev/null | grep -q 'github/gh-stack'; then
+  gh extension install github/gh-stack
+fi
+
+# Verify installation
+gh stack --help &>/dev/null || { echo "ABORT: gh stack extension failed to install"; exit 9; }
+```
+
+Exit code 9 means "Stacked pull requests are not enabled for this repository"
+— the feature is in public preview and may not yet be available.
+
+### D.2 — Classify commits into stack layers
+
+Run Workflow A (A.2–A.4) first to categorize and commit all changes. Then
+inspect the resulting commits:
+
+```bash
+git log --oneline $DEFAULT_BRANCH..HEAD
+```
+
+Each commit becomes one layer in the stack. If a commit is trivial (e.g., a
+one-line lint fix), fold it into the layer below with `git rebase -i` before
+proceeding. Each layer should be a meaningful, reviewable unit.
+
+**Layer ordering** — same dependency order as Workflow A:
+1. `chore:` / `docs:` (bottom of stack, closest to trunk)
+2. `refactor:`
+3. `feat:` / `fix:`
+4. `test:` (top of stack)
+
+### D.3 — Initialize the stack
+
+```bash
+# Create the first layer (bottom of stack, closest to trunk)
+gh stack init <first-layer-branch>
+```
+
+The first layer branch name follows the same semantic naming as C.2:
+`<prefix>/<slug>`. Examples: `chore/update-docs`, `refactor/auth-module`,
+`feat/oauth2-login`.
+
+`gh stack init` enables `git rerere` automatically for conflict resolution
+across rebases.
+
+### D.4 — Cherry-pick each subsequent commit onto its own layer
+
+For each remaining commit (in order from bottom to top):
+
+```bash
+# Create the next layer branch
+gh stack add <layer-branch>
+
+# Cherry-pick the commit onto this layer
+git cherry-pick <commit-hash>
+
+# If the cherry-pick has conflicts, resolve them, then:
+# git add <resolved-files>
+# git cherry-pick --continue
+```
+
+**Important:** Cherry-pick commits one at a time, in the exact order they
+appear in the original branch. Each `gh stack add` creates a branch whose
+parent is the previous layer — this is what forms the dependency chain.
+
+If `gh stack add` fails because the current branch is not the top of the
+stack, run `gh stack top` to jump there first.
+
+### D.5 — Verify the stack
+
+```bash
+gh stack view
+```
+
+Confirm:
+- Every layer has exactly one commit
+- Layer ordering is correct (docs/chore → refactor → feat/fix → test)
+- Each commit message is conventional and descriptive (it becomes the PR title
+  in `gh stack submit --auto` mode)
+
+### D.6 — Push and submit
+
+```bash
+# Push all stack branches to the remote
+gh stack push
+
+# Create pull requests for every layer and link them as a stack on GitHub
+gh stack submit
+```
+
+`gh stack submit` opens an interactive editor to review and edit PR titles
+and descriptions. In non-interactive mode or with `--auto`, it generates
+titles from commit messages automatically.
+
+Flags:
+- `--auto` — skip the editor, auto-generate PR titles from commit messages
+- `--open` — create PRs as ready for review (default is draft mode)
+- `--draft` is the default — each PR opens as a draft. Use `--open` to flip.
+
+### D.7 — Report the stack
+
+After `gh stack submit`, report:
+- Stack number (shown in the submit output and on github.com)
+- Number of layers (branches/PRs)
+- Each layer: branch name → commit summary → PR URL
+- Merge command: `gh stack merge` (or `gh stack merge <stack-number>`)
+
+### D.8 — Merging the stack
+
+When the user is ready to merge, or when all reviews are approved:
+
+```bash
+# Interactive — pick which layers to merge
+gh stack merge
+
+# Non-interactive — merge the entire stack
+gh stack merge --yes --squash
+```
+
+The merge is all-or-nothing: if any PR fails checks, none are merged. Stacked
+PRs work with merge queues — use `gh stack merge` (not `gh pr merge`) to
+preserve the atomic merge.
+
 ## Gotchas
 
 - **Cumulative semver is absolute.** A single `feat:` anywhere in the commit
@@ -362,3 +519,21 @@ Report:
 - **Workflow C — push is always opt-in for the PR step.** Pushing the branch
   (C.5) is automatic because the user asked to create a PR. But the PR creation
   itself (C.6) should confirm the title and base branch before firing.
+- **Workflow D — `gh stack` extension is required.** The extension
+  (`github/gh-stack`) must be installed and the repository must have Stacked
+  PRs enabled (public preview, rolling out to all repositories). If the
+  repository does not support stacked PRs yet, fall back to Workflow C.
+- **Workflow D — one commit per layer.** Stacked PRs are most effective when
+  each layer is a single, focused commit. If a layer accumulates multiple
+  commits during development, squash them before submitting. Use
+  `gh stack modify` to restructure layers if needed.
+- **Workflow D — cherry-pick, don't rebase onto.** When distributing existing
+  commits across stack layers, use `git cherry-pick` to copy each commit onto
+  its layer branch. Do not rebase the original branch onto the stack — that
+  rewrites history unpredictably across multiple branches.
+- **Workflow D — merge with `gh stack merge`, not `gh pr merge`.** Standard
+  `gh pr merge` does not understand stack dependencies. Always use
+  `gh stack merge` to preserve the atomic merge guarantee.
+- **Workflow D — stack must be linear.** No merge commits in the stack.
+  `gh stack modify` enforces linear history; if it rejects your stack, rebase
+  to remove merge commits before proceeding.
