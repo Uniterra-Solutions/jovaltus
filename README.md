@@ -1,6 +1,6 @@
 # Jovaltus — Hermes Plugin for Skill-Driven Development
 
-> **Jovaltus** bundles 11 agent skills that guide an orchestrator through a
+> **Jovaltus** bundles 14 agent skills that guide an orchestrator through a
 > complete development pipeline — from requirements discovery to parallel
 > execution, adversarial review, and PRD-driven QA. The plugin itself is
 > minimal; the skills do the work.
@@ -15,7 +15,7 @@ Direct Delegate Pattern**. The plugin no longer exposes tools
 bundles self-contained skills that the orchestrator loads at each phase.
 
 ```
-discuss → design → to-spec → to-tasks → to-environment → execute → (review → merge → qa)
+discuss → design → to-spec → to-tasks → to-environment → execute → simplify → (review → merge → qa)
 ```
 
 Every skill is independently loadable via `skill_view()`. The orchestrator
@@ -154,7 +154,7 @@ ln -s /Users/tszkinlai/uniterra/jovaltus ~/.hermes/profiles/jovaltus-agent/plugi
 hermes -p jovaltus-agent
 # 在 session 中輸入：
 # 「list all skills whose name matches jovaltus」
-# 應該看到 pipeline + utility skills 共 11 個
+# 應該看到 pipeline + utility skills 共 14 個
 ```
 
 ### 日常使用
@@ -184,7 +184,7 @@ hermes -p jovaltus-agent
 #    「load skill discuss」
 
 # 3. 按順序載入：discuss → design → to-spec → to-tasks
-#    → to-environment → execute → review → qa
+#    → to-environment → execute → simplify → review → qa
 
 # 每個 skill 會指導你完成該階段，產出對應的 artifacts
 ```
@@ -208,7 +208,7 @@ Jovaltus v0.6.0 is not a pipeline engine — it's a skill bundle. The plugin:
 
 1. **Self-bootstraps** fabricium on import (survives Hermes venv recreation)
 2. **Registers CLI commands** via `fabricium.HermesPlugin` (`setup`, `status`, `update`)
-3. **Bundles 11 skills** auto-discovered by Fabricium from `src/jovaltus/skills/`
+3. **Bundles 14 skills** auto-discovered by Fabricium from `src/jovaltus/skills/`
 
 That's it. No tools, no state machine, no hooks, no subagent spawning logic.
 The orchestrator loads skills and follows their guidance.
@@ -217,7 +217,7 @@ The orchestrator loads skills and follows their guidance.
 
 | Old (v0.5.x) | New (v0.6.0) |
 |---------------|---------------|
-| 3 tools + state machine + hooks + schemas | 11 self-contained skills |
+| 3 tools + state machine + hooks + schemas | 14 self-contained skills |
 | ~2,200 lines of Python | ~55 lines of Python |
 | Pipeline hardcoded in tool handlers | Pipeline defined by skill documents |
 | Edit prompts → edit Python | Edit skills → edit Markdown |

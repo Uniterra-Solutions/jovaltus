@@ -11,11 +11,6 @@ Step-by-step recipes for common development tasks.
    name: <skill-name>
    description: >-
      ... (must include LOAD/Do NOT use triggers)
-   author: LaiTszKin
-   version: 0.1.0
-   metadata:
-     jovaltus:
-       tags: [...]
    ---
    ```
 3. Add supporting files under `references/`, `assets/`, `templates/` as needed
@@ -74,7 +69,7 @@ git commit --no-verify -m "..."
 
 1. Bump version in `pyproject.toml` `[project] version`
 2. Bump version in `src/jovaltus/plugin.yaml` `version`
-3. If skills changed, bump their version in respective `SKILL.md` files
+3. If skills changed, update their `SKILL.md` files (frontmatter is `name` + `description` only)
 4. Update `CHANGELOG.md`
 5. Tag: `git tag v<version> && git push --tags` (triggers PyPI trusted publisher)
 

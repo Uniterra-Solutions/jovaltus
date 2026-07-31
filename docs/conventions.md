@@ -74,7 +74,7 @@ def register(ctx):
 
 | Convention | Detail |
 |-----------|--------|
-| YAML frontmatter | Required: `name`, `description`, `author`, `version` |
+| YAML frontmatter | Required: `name`, `description` only (no author/version/metadata) |
 | Verb-form naming | Pipeline skills use verb form: `discuss`, `design`, `execute` |
 | Progressive disclosure | Core content first; details in references/assets |
 | Skill independence | Every skill loadable standalone; no hard dependency on prior skills |
