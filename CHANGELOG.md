@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.14.0 — 2026-08-02
+
+### Added
+
+- **`to-tasks` now expresses subagent relationships as a DAG.** The manifest
+  (scheduling document) gains a Task DAG section: mermaid diagram, ASCII
+  diagram, edge list, and level table. Every task is a node, every
+  dependency is a directed edge, and each task gets a topological level
+  (`1 + max(dep levels)`). The parallel/batch two-mode framing is replaced
+  by one unified model — a zero-edge DAG (all tasks at Level 1) is fully
+  parallel; cross-level dependencies are first-class edges, not a fallback.
+- **`execute` now dispatches subagents according to the DAG.** Reads the
+  manifest's task DAG and runs level-parallel dispatch: all tasks at a level
+  spawn simultaneously via `terminal(background=true)` (no concurrency cap);
+  levels execute sequentially; each level's branches merge into an
+  integration branch so the next level's subagents consume real prior output.
+  Failed tasks block their dependents.
+
+### Changed
+
+- **`to-environment` bundled skill removed.** Its worktree creation workflow
+  (sparse-checkout isolation, `TASK.md` seeding, blast-radius analysis) is
+  absorbed into `execute` Phase 1, with `assets/worktree-config.md` moved to
+  the `execute` skill. The pipeline is now
+  `discuss → design → to-spec → to-tasks → execute → simplify → review → qa`.
+- **Bundled skills: 14 → 13** (9 pipeline + 4 utility). `jovaltus` core
+  skill, `README.md`, `AGENTS.md`, and `docs/` updated for the new chain,
+  skill count, and DAG execution model.
+
 ## v0.13.1 — 2026-07-31
 
 ### Changed
