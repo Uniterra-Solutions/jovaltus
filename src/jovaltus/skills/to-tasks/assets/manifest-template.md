@@ -1,89 +1,114 @@
 # Task Manifest: {{plan-name}}
 
 > **Generated:** {{timestamp}} | **Plan:** `.plan/{{DD-MM-YYYY}}/{{name}}/`
-> **Mode:** {{parallel | batch}} | **Total tasks:** {{N}} | **Batches:** {{1, or N for batch mode}}
-> **Execution:** {{All tasks dispatch in parallel (fully parallel mode) | Tasks within each batch dispatch in parallel; batches run sequentially (batch mode)}}
+> **Execution model:** DAG | **Total tasks:** {{N}} | **Levels:** {{L}}
+> **Execution:** Tasks at the same level dispatch in parallel; levels run
+> sequentially in topological order. Level N worktrees receive Level 1..N-1
+> output via the integration branch before their subagents start.
 
 ---
 
-## Mode: {{parallel | batch}}
+## Execution Model: DAG
 
-{{If parallel: All tasks own disjoint files. Zero shared write targets. All can run simultaneously.}}
-{{If batch: Tasks grouped into sequential batches. Within each batch, tasks are parallel-safe. Between batches, later batches depend on earlier batches' output. Execute batches in order: complete batch N → merge → dispatch batch N+1.}}
+_Tasks are nodes; a directed edge `A → B` means "B depends on A". The graph
+is acyclic. Same-level tasks run in parallel; levels execute sequentially.
+A zero-edge DAG (all tasks at Level 1) is fully parallel._
+
+| Level | Tasks | Notes |
+|-------|-------|-------|
+| 1 | T1, T2 | Foundation — no dependencies |
+| 2 | T3, T4 | Consume Level 1 output |
+| 3 | T5 | Consumes Level 2 output |
+| {{...}} | ... | ... |
 
 ---
 
 ## Task Inventory
 
-{{For fully parallel mode — no Batch or Depends On columns:}}
-
-| Task ID | Slug | Owns Tests | Task File | Worktree | Branch | Verification |
-|---------|------|------------|-----------|----------|--------|-------------|
-| {{T1}} | {{slug}} | ✅ | `.plan/.../tasks/task-{{t1}}-{{slug}}.md` | `.worktrees/{{t1}}-{{slug}}/` | `agent/{{t1}}-{{slug}}` | `pytest tests/... -v` |
-| {{T2}} | {{slug}} | ✅ | `.plan/.../tasks/task-{{t2}}-{{slug}}.md` | `.worktrees/{{t2}}-{{slug}}/` | `agent/{{t2}}-{{slug}}` | `pytest tests/... -v` |
-| {{T3}} | {{slug}} | ✅ | `.plan/.../tasks/task-{{t3}}-{{slug}}.md` | `.worktrees/{{t3}}-{{slug}}/` | `agent/{{t3}}-{{slug}}` | `pytest tests/... -v` |
-| {{...}} | ... | ... | ... | ... | ... | ... |
-
-{{For batch mode — includes Batch and Depends On columns:}}
-
-| Task ID | Batch | Slug | Owns Tests | Depends On | Task File | Worktree | Branch | Verification |
+| Task ID | Level | Slug | Owns Tests | Depends On | Task File | Worktree | Branch | Verification |
 |---------|-------|------|------------|------------|-----------|----------|--------|-------------|
-| {{T1}} | 1 | {{slug}} | ✅ | — | `.plan/.../tasks/task-{{t1}}-{{slug}}.md` | `.worktrees/{{t1}}-{{slug}}/` | `agent/{{t1}}-{{slug}}` | `pytest tests/... -v` |
-| {{T2}} | 1 | {{slug}} | ✅ | — | `.plan/.../tasks/task-{{t2}}-{{slug}}.md` | `.worktrees/{{t2}}-{{slug}}/` | `agent/{{t2}}-{{slug}}` | `pytest tests/... -v` |
-| {{T3}} | 2 | {{slug}} | ✅ | T1, T2 | `.plan/.../tasks/task-{{t3}}-{{slug}}.md` | `.worktrees/{{t3}}-{{slug}}/` | `agent/{{t3}}-{{slug}}` | `pytest tests/... -v` |
-| {{T4}} | 2 | {{slug}} | ✅ | T1 | `.plan/.../tasks/task-{{t4}}-{{slug}}.md` | `.worktrees/{{t4}}-{{slug}}/` | `agent/{{t4}}-{{slug}}` | `pytest tests/... -v` |
+| T1 | 1 | {{core-types}} | ✅ | — | `.plan/.../tasks/task-t1-{{core-types}}.md` | `.worktrees/t1-{{core-types}}/` | `agent/t1-{{core-types}}` | `pytest tests/core -v` |
+| T2 | 1 | {{db-schema}} | ✅ | — | `.plan/.../tasks/task-t2-{{db-schema}}.md` | `.worktrees/t2-{{db-schema}}/` | `agent/t2-{{db-schema}}` | `pytest tests/db -v` |
+| T3 | 2 | {{feature-a}} | ✅ | T1, T2 | `.plan/.../tasks/task-t3-{{feature-a}}.md` | `.worktrees/t3-{{feature-a}}/` | `agent/t3-{{feature-a}}` | `pytest tests/features/test_a.py -v` |
+| T4 | 2 | {{feature-b}} | ✅ | T2 | `.plan/.../tasks/task-t4-{{feature-b}}.md` | `.worktrees/t4-{{feature-b}}/` | `agent/t4-{{feature-b}}` | `pytest tests/features/test_b.py -v` |
+| T5 | 3 | {{integration}} | ✅ | T3, T4 | `.plan/.../tasks/task-t5-{{integration}}.md` | `.worktrees/t5-{{integration}}/` | `agent/t5-{{integration}}` | `pytest tests/integration -v` |
 | {{...}} | ... | ... | ... | ... | ... | ... | ... | ... |
+
+---
+
+## Task DAG
+
+_Every subagent relationship expressed in DAG form: mermaid diagram, ASCII
+diagram, and edge list. `execute` schedules dispatch from this section._
+
+### Mermaid
+
+```mermaid
+graph TD
+    T1["T1: {{core-types}}"] --> T3["T3: {{feature-a}}"]
+    T2["T2: {{db-schema}}"] --> T3
+    T2 --> T4["T4: {{feature-b}}"]
+    T3 --> T5["T5: {{integration}}"]
+    T4 --> T5
+```
+
+### ASCII
+
+```
+Level 1            Level 2            Level 3
+  T1 ──┐
+       ├──► T3 ──┐
+  T2 ──┘         ├──► T5
+       └──► T4 ──┘
+```
+
+### Edge List
+
+| Task | Depends On | Why |
+|------|------------|-----|
+| T3 | T1, T2 | imports core types + db schema |
+| T4 | T2 | queries the db schema |
+| T5 | T3, T4 | integration test over both features |
+| {{...}} | ... | ... |
+
+**Acyclicity:** no edge path returns to its start → ✅ valid DAG
+**Topological order:** Level 1 (T1, T2) → Level 2 (T3, T4) → Level 3 (T5)
+**Consistency:** every edge points from a lower level to a higher level ✅
 
 ---
 
 ## File Ownership Map
 
-_Every file belongs to exactly one task per batch. Every test file owned by the same task as its implementation. {{For fully parallel: Zero overlap proves parallel-safe execution. For batch: Zero overlap within each batch; cross-batch overlaps are documented below.}}_
+_Every file belongs to exactly one task per level. Every test file is owned
+by the same task as its implementation. Zero overlap within each level;
+cross-level overlaps are documented below._
 
-| File | Owner | Batch | Action |
+| File | Owner | Level | Action |
 |------|-------|-------|--------|
-| `src/auth/register.py` | {{T1}} | {{1 or —}} | CREATE |
-| `src/auth/login.py` | {{T2}} | {{1 or —}} | CREATE |
-| `src/auth/__init__.py` | {{T1}} | {{1 or —}} | EDIT |
-| `src/auth/jwt.py` | {{T1}} | {{1 or —}} | CREATE |
-| `src/models/user.py` | {{T3}} | {{1 or —}} | CREATE |
-| `tests/auth/test_register.py` | {{T1}} | {{1 or —}} | CREATE |
-| `tests/auth/test_login.py` | {{T2}} | {{1 or —}} | CREATE |
-| `tests/models/test_user.py` | {{T3}} | {{1 or —}} | CREATE |
+| `src/core/types.py` | T1 | 1 | CREATE |
+| `src/db/schema.py` | T2 | 1 | CREATE |
+| `src/features/a.py` | T3 | 2 | CREATE |
+| `src/features/b.py` | T4 | 2 | CREATE |
+| `src/features/__init__.py` | T3 | 2 | EDIT |
+| `tests/core/test_types.py` | T1 | 1 | CREATE |
+| `tests/features/test_a.py` | T3 | 2 | CREATE |
+| `tests/features/test_b.py` | T4 | 2 | CREATE |
 | {{...}} | ... | ... | ... |
 
-**Validation:** {{N}} files, {{N}} unique write owners per batch → ✅ zero write conflicts within each batch.
-**Test bundling:** {{K}} test files, all owned by same task as their implementation → ✅ tests never split.
+**Validation:** {{N}} files, unique write owner per level → ✅ zero write
+conflicts within each level.
+**Test bundling:** {{K}} test files, all owned by same task as their
+implementation → ✅ tests never split.
 
-{{For batch mode only — cross-batch file overlaps:}}
+### Cross-Level File Overlaps
 
-### Cross-Batch File Overlaps
+_Later levels intentionally edit files created by earlier levels. These
+overlaps are safe because levels execute sequentially._
 
-_Later batches intentionally edit files created or modified by earlier batches. These overlaps are safe because batches execute sequentially._
-
-| File | Batch 1 Owner | Batch 2 Owner | Notes |
-|------|---------------|---------------|-------|
-| `src/models/user.py` | T1 (CREATE) | T3 (EDIT — add fields) | T3 extends the schema T1 created |
+| File | Earlier-Level Owner | Later-Level Owner | Notes |
+|------|--------------------|--------------------|-------|
+| `src/core/types.py` | T1 (Level 1 — CREATE) | T3 (Level 2 — EDIT, extend types) | T3 extends the types T1 created |
 | {{...}} | ... | ... | ... |
-
----
-
-## Batch Dependency Graph (batch mode only)
-
-```
-Batch 1 (Foundation)
-  T1: {{core-types}} ─────┐
-  T2: {{db-schema}} ──────┤
-                           ▼
-Batch 2 (Features)        │
-  T3: {{feature-a}} ◄─────┤ (depends on T1, T2)
-  T4: {{feature-b}} ◄─────┘ (depends on T1)
-
-Batch 3 (Integration)
-  T5: {{integration}} ◄─── T3, T4
-```
-
-**Dependency chain:** acyclic ✅ | **Batch 1 dependencies:** none (foundation) ✅
 
 ---
 
@@ -91,23 +116,13 @@ Batch 3 (Integration)
 
 _Updated by the `execute` skill during execution._
 
-{{Fully parallel mode:}}
-
-| Task ID | Status | Started | Completed | Result |
-|---------|--------|---------|-----------|--------|
-| {{T1}} | ⬜ pending | — | — | — |
-| {{T2}} | ⬜ pending | — | — | — |
-| {{T3}} | ⬜ pending | — | — | — |
-| {{...}} | ⬜ pending | — | — | — |
-
-{{Batch mode:}}
-
-| Task ID | Batch | Status | Started | Completed | Result |
+| Task ID | Level | Status | Started | Completed | Result |
 |---------|-------|--------|---------|-----------|--------|
-| {{T1}} | 1 | ⬜ pending | — | — | — |
-| {{T2}} | 1 | ⬜ pending | — | — | — |
-| {{T3}} | 2 | ⬜ pending | — | — | — |
-| {{T4}} | 2 | ⬜ pending | — | — | — |
+| T1 | 1 | ⬜ pending | — | — | — |
+| T2 | 1 | ⬜ pending | — | — | — |
+| T3 | 2 | ⬜ pending | — | — | — |
+| T4 | 2 | ⬜ pending | — | — | — |
+| T5 | 3 | ⬜ pending | — | — | — |
 | {{...}} | ... | ... | ... | ... | ... |
 
 Statuses: ⬜ pending | 🟡 running | 🟢 passed | 🔴 failed

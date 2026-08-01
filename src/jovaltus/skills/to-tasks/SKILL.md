@@ -1,115 +1,53 @@
 ---
 name: to-tasks
 description: >
-  Decomposes implementation specs into a flat set of complete vertical
-  slices for worktree execution. Each task bundles its own implementation
-  + tests + full referenced code context — zero external lookups needed.
-  Tasks are intentionally larger (30-60 min) to eliminate cross-worktree
-  coordination.
-
-  Two modes: (1) Fully Parallel — all tasks run simultaneously with
-  disjoint file ownership (preferred). (2) Batch Execution — sequential
-  batches when genuine cross-task dependencies cannot be eliminated.
+  Decomposes implementation specs into tasks for DAG-based worktree execution.
+  The manifest (scheduling document) expresses every subagent relationship as
+  a DAG: nodes = tasks, directed edges = "depends on", acyclic. Tasks at the
+  same topological level run in parallel; levels execute sequentially with
+  inter-level merges. Zero edges = fully parallel. Each task bundles its own
+  implementation + tests + full referenced code context — zero external
+  lookups needed. Tasks are intentionally larger (30-60 min) to keep levels
+  flat.
 
   Produces manifest + per-task files under .plan/<DD-MM-YYYY>/<name>/tasks/.
   LOAD when:
   - Implementation specs exist; user is ready to orchestrate execution
   - User says "break into tasks" or "orchestrate" or "create task list"
-  - User mentions parallel execution, worktree isolation, task DAG
+  - User mentions parallel execution, worktree isolation, task DAG,
+    dependencies between subagents
   Do NOT use for:
   - Writing specs (use to-spec)
-  - Writing code directly
-  - Tasks where file-level independence is impossible
+  - Writing code directly (use execute)
+  - Tasks where file-level independence within a level is impossible
 ---
 
 # To Tasks
 
 ## Goal
 
-Decompose specs into flat, fully independent task files. Each task is a
-**complete vertical slice**: implementation + tests + referenced code context
-all in one worktree. Tasks can be larger (30-60 min) — the trade-off is
-intentional: bigger self-contained units eliminate cross-worktree coordination
-and enable true fire-and-forget parallel execution.
+Decompose specs into task files and a scheduling document (the manifest) that
+expresses the relationships between all subagents as a **DAG** — a directed
+acyclic graph. Each task is a **complete vertical slice**: implementation +
+tests + referenced code context all in one TASK.md.
 
-Zero shared write targets — all tasks run simultaneously in parallel
-worktrees with zero merge conflicts. No cross-task dependencies of any kind:
-every task is a self-contained, logically independent unit. Its verification
-passes without any other task's code existing. Its implementation makes sense
-without knowing what other tasks do.
+The DAG is the schedule:
 
-## Two Modes
+- **Nodes** = tasks. Each task becomes one subagent during `execute`.
+- **Directed edge** `T1 → T3` = "T3 depends on T1". T3 consumes T1's output,
+  so T3 runs only after T1 completes and T1's branch is merged into the
+  integration branch.
+- **Acyclic by construction.** A cycle means the decomposition is wrong.
+- **Level** = topological layer. Level 1 tasks have no dependencies.
+  `level(T) = 1 + max(level(dep) for dep in T.deps)` (1 when no deps).
+  Same-level tasks run in parallel; levels execute sequentially.
+- **Zero edges = fully parallel.** A manifest where every task sits at
+  Level 1 is the classic fully-parallel run — preferred whenever possible.
 
-to-tasks supports two decomposition strategies. **Always attempt fully
-parallel first** — it is simpler, faster, and the default. Only fall back
-to batch execution when genuine dependencies survive every attempt to
-eliminate them.
-
-### Mode 1: Fully Parallel (Preferred — Default)
-
-All tasks own disjoint files and have zero logical dependencies. Every
-task can run simultaneously in isolated worktrees. This is the ideal:
-minimal coordination, maximum throughput, simplest execution.
-
-**Decision gate:** Can every task pass the self-containment test?
-- Its verification command works with zero other task code present
-- Its code imports nothing owned by another task
-- A subagent implementing it never needs to know what other tasks are doing
-
-→ **YES**: Use fully parallel mode. Proceed to Phase 1 normally.
-  All tasks get dispatched at once. The manifest has no batch columns.
-
-### Mode 2: Batch Execution (Fallback)
-
-When genuine cross-task dependencies exist that cannot be eliminated,
-decompose into sequential batches. Within each batch, tasks are
-parallel-safe (disjoint files, no internal dependencies). Between
-batches, later batches depend on earlier batches' output.
-
-**When to fall back to batch mode** (try Mode 1 first, then each of
-these remedies, then fall back only when none work):
-
-1. Task B genuinely needs Task A's module to compile — a cross-task
-   Python import that cannot be resolved by restructuring or merging.
-2. Task B needs data model definitions, base classes, or interfaces
-   that Task A creates (but merging A + B would create a task too
-   large or unfocused).
-3. A shared foundation layer (database schema, core types, plugin
-   registry) must exist before feature tasks can be written, and
-   the foundation is large enough to justify its own task.
-
-**Remedies to try before falling back:**
-1. **Merge** dependent tasks into one larger task (accept the size
-   increase — a 90-min self-contained task beats two 30-min tasks
-   that need cross-batch coordination).
-2. **Restructure** so neither task needs the other — extract the
-   shared dependency into its own file, assign it to the task that
-   creates it, and have both tasks own their consumers independently.
-3. **Lazy registration pattern** (see `references/lazy-registration-pattern.md`)
-   for shared registry/entry-point files — resolves file-edit conflicts
-   but does NOT solve cross-task imports.
-
-→ **Only when ALL remedies fail**: Use batch mode.
-
-**Batch structure:**
-- **Batch 1**: Foundation — shared infrastructure, core types, base
-  classes, registries, database schema. Creates what other batches
-  consume.
-- **Batch 2**: Feature tasks — consume Batch 1 output. May create
-  additional shared modules that Batch 3 consumes.
-- **Batch N**: Polish/integration — consume all prior batches.
-- Within the same batch: tasks are fully parallel, disjoint files.
-- Across batches: tasks may share files (sequential execution
-  prevents write conflicts).
-
-**Manifest differences for batch mode:**
-- Manifest declares `mode: batch` and lists batch count.
-- Task inventory includes a "Batch" column grouping tasks.
-- File ownership map validates within-batch disjointness, not
-  cross-batch (cross-batch overlap is intentional — later batches
-  build on earlier ones).
-- "Depends On" column documents which prior-batch tasks each task
-  consumes (so `execute` knows merge order).
+Every relationship is visible in the manifest: the DAG diagram
+(mermaid + ASCII), the edge list, and the Level + Depends On columns in the
+task inventory. **The scheduling document IS the DAG.** `execute` reads it
+and dispatches level by level.
 
 ## Acceptance Criteria
 
@@ -117,38 +55,52 @@ these remedies, then fall back only when none work):
   context all in one TASK.md — no external lookups needed
 - Every test file owned by the same task as the code it tests — tests are
   NEVER split from their implementation
-- **Fully parallel mode**: Zero file write conflicts — every file owned by
-  exactly one task
-- **Batch mode**: Zero file write conflicts within each batch; cross-batch
-  file overlap is permitted and documented in the manifest
+- Manifest declares a DAG: nodes, edges, levels — acyclic, no missing edges
+- Zero file write conflicts **within each level** (same-level tasks are
+  parallel-safe)
+- Cross-level file overlaps are explicit and documented (later levels build
+  on earlier levels' output)
 - Every READ file's content (full source or key excerpts) inlined in the task
+- Every task at Level ≥ 2 includes key excerpts of the dependency interfaces
+  it consumes (signatures, types, import paths)
 - Every task includes: file ownership, verification command, full spec + design
   excerpts + referenced file contents + project rules (all inline)
-- Manifest: flat inventory with file ownership map proving within-batch
-  disjointness, mode declaration, and batch dependency documentation
+- Manifest: flat inventory with file ownership map proving within-level
+  disjointness, plus the task DAG (diagram + edge list + level table)
+- Every requirement in every spec is covered by at least one task
 
 ## Core Principles
 
-**Flat, fully independent (Mode 1 — default).** Every task is a closed system.
-No task imports from, references, or depends on another task's output. If you
-find yourself thinking "Task B needs X from Task A to work" — merge A and B
-into one task, restructure so neither needs the other, or apply the lazy
-registration pattern. Only when all three remedies fail, fall back to batch
-mode (Mode 2).
+**Same-level independence; cross-level dependency as first-class edges.**
+Within a level, tasks are closed systems: no imports, no shared write
+targets, no knowledge of each other. Across levels, dependencies are
+declared explicitly as DAG edges — not hidden handshakes. A dependency
+edge is not a decomposition failure; it is the DAG model working as
+intended. The pipeline can schedule real inter-subagent relationships
+instead of pretending they don't exist.
 
-**Batch mode is a last resort, not a first choice.** Batch execution adds
-coordination overhead: inter-batch merges, sequential wait time, and more
-complex integration. Every batch you add roughly doubles the execution
-pipeline's wall-clock time. Prefer a larger self-contained task over two
-smaller batch-dependent tasks.
+**Prefer flat, but don't force it.** The default is a zero-edge DAG (all
+tasks at Level 1). When a genuine dependency surfaces, first try the
+remedies in order:
+1. **Merge** the dependent tasks into one larger task (accept the size
+   increase — a 90-min self-contained task beats two tasks that need a
+   cross-level handshake).
+2. **Restructure** so neither task needs the other — extract the shared
+   dependency into its own file, assign it to the task that creates it,
+   and have consumers own their code independently.
+3. **Lazy registration pattern** (see `references/lazy-registration-pattern.md`)
+   for shared registry/entry-point files.
+
+Only when all three fail, keep the edge — it is a legitimate, documented
+part of the DAG, and `execute` will sequence it correctly.
 
 **Complete vertical slice over small tasks.** Each task owns its entire
 vertical: implementation code, its tests, and any local supporting files
 (config stubs, fixtures, type stubs). Tests are NEVER split from the code
 they test. A task may be larger (30-60 min, up to 90 min for merged tasks) —
 this is an intentional trade-off. A bigger self-contained task that runs
-without coordination is cheaper than two smaller tasks that need cross-batch
-handshakes.
+without coordination is cheaper than two smaller tasks that need a
+cross-level handshake.
 
 **Full context, not just contracts.** Interface contracts tell a task WHAT
 another task produces. But the subagent also needs to understand HOW existing
@@ -159,12 +111,13 @@ of truth for its entire worktree context.
 
 **Self-contained or don't ship.** The subagent's entire context is its
 TASK.md. No linked files, no shared references, no runtime coordination.
-This enables worktree isolation and parallel execution.
+This enables worktree isolation and level-parallel execution.
 
 **Each task bundles inline:** full spec copy, relevant design excerpts,
 full content of all READ files, project rules, output declaration.
 Duplication is intentional — cheaper than coordination cost of shared
-references.
+references. Level ≥ 2 tasks additionally inline the dependency interfaces
+they will consume after the inter-level merge.
 
 ## Prerequisites
 
@@ -174,22 +127,18 @@ references.
 
 ## Workflow
 
-### Phase 0: Assess Mode
+### Phase 0: Identify Dependencies
 
-Before building the file ownership map, decide: fully parallel or batch?
+Read all specs. For each pair of specs that touch related files, ask:
+"Does Spec B genuinely need Spec A's code to compile or run?"
 
-1. Read all specs. For each pair of specs that touch related files, ask:
-   "Does Spec B genuinely need Spec A's code to compile or run?"
-2. If YES: try merging A and B. Does the merged task stay under ~90 min
-   and remain focused on one concern?
-3. If merging fails (too large, too unfocused): try restructuring. Can
-   the shared dependency be extracted into its own file that A owns, with
-   B consuming it independently?
-4. If restructuring fails: try lazy registration for registry files.
-5. If ALL fail: document the dependency. This is a batch boundary.
+Apply the remedies in order — merge, then restructure, then lazy
+registration — for every pair that fails the self-containment test. What
+survives all three remedies becomes the dependency edge set.
 
-**Result**: declare mode (`parallel` or `batch`) and if batch, sketch
-batch groupings. Inform the user before proceeding to Phase 1.
+Sketch the DAG: tasks as nodes, surviving dependencies as directed edges.
+Assign provisional levels (`1 + max(dep levels)`). Inform the user before
+proceeding: "N tasks, M edges, L levels" and the level breakdown.
 
 ### Phase 1: Build File Ownership Map
 
@@ -197,8 +146,8 @@ Read all specs. For each: what files it creates/edits, what existing files
 it needs to read for context, and — critically — what test files accompany
 its implementation.
 
-Map every file to exactly one task. If any file appears in two specs →
-re-split until ownership is exclusive.
+Map every file to exactly one task **per level**. If any file appears in two
+specs at the SAME level → re-split until ownership is exclusive.
 
 **Test ownership rule**: Every implementation file's test file(s) MUST be
 owned by the same task. If spec A creates `src/auth/login.py`, the same
@@ -207,68 +156,87 @@ implementation — this is a hard rule, not a guideline.
 
 **READ context rule**: For every file marked READ, capture what the
 subagent needs to understand. This content will be inlined in the task
-file (Phase 3).
+file (Phase 4).
 
 ### Phase 2: Validate Ownership
 
-**Fully parallel mode**: Prove no two specs share a write target. Only
-one spec edits any given file. Resolve conflicts before proceeding.
+**Within each level**: prove no two tasks share a write target. Only one
+task edits any given file at a given level. Resolve conflicts before
+proceeding.
 
-**Batch mode**: Prove no two specs WITHIN THE SAME BATCH share a write
-target. Cross-batch file overlap is permitted (and expected — later
-batches build on earlier ones). Document all cross-batch overlaps in
-the manifest's dependency notes.
+**Across levels**: cross-level file overlap is permitted — and expected,
+since later levels build on earlier output. Document every cross-level
+overlap in the manifest (file, earlier-level owner, later-level owner, why).
 
-### Phase 3: Write Task Files
+### Phase 3: Assign Topological Levels
 
-Group related specs into task-sized vertical slices (3-5 tasks total).
-For each resulting task: load `assets/task-template.md`. Fill:
-- File Ownership (CREATE/EDIT/READ — zero write overlap WITHIN THE SAME BATCH)
+Assign each task its level: `level(T) = 1 + max(level(dep) for dep in deps)`
+(Level 1 when no deps). Verify:
+
+- **Acyclic** — no path through the edges returns to its start. A cycle
+  makes the level computation undefined; stop and re-decompose.
+- **Consistent** — every edge points from a lower level to a higher level.
+- **Complete** — every task's dependencies live entirely in earlier levels.
+
+The level assignment is what `execute` will use to schedule dispatch.
+
+### Phase 4: Write Task Files
+
+Group related specs into task-sized vertical slices (3-5 tasks total is
+typical; fewer is often better). For each resulting task: load
+`assets/task-template.md`. Fill:
+
+- File Ownership (CREATE/EDIT/READ — zero write overlap within the level)
 - **Tests included** — every implementation file's tests owned by this same task
 - **Referenced Code** — full content of every READ file the subagent needs
   to understand (copy-paste source, don't just list paths).
-  **Batch mode addition**: For tasks in batch 2+, also include key excerpts
-  from batch 1 files they depend on, so the subagent knows the interfaces
-  it will consume after the inter-batch merge.
+  **Level ≥ 2 addition**: also inline key excerpts from dependency tasks'
+  files — class signatures, function signatures, type definitions, import
+  paths. The subagent implements against these interfaces; the actual code
+  is merged into its worktree by `execute` before the subagent runs.
 - Full spec inline (copy, don't link)
 - Design excerpts (only relevant parts)
 - Project rules (relevant boundaries)
-- Verification command (must work in isolation within its batch — for batch 2+
-  tasks, the verification works after merging batch 1 output into its worktree)
+- Verification command (must work in isolation at its level — for Level ≥ 2
+  tasks, after merging dependency output into its worktree)
 
 Every task must pass the **self-containment test**: "Can a subagent with
 ONLY this TASK.md and the existing repo files implement correctly — without
 reading any other task file, spec, or design doc?"
 
-**Batch mode self-containment**: For batch 2+ tasks, the test becomes:
-"Can a subagent with this TASK.md, the existing repo files, AND the
-merged output of prior batches implement correctly?"
+**Level ≥ 2 self-containment**: the test becomes: "Can a subagent with this
+TASK.md, the existing repo files, AND the merged output of all earlier
+levels implement correctly?"
 
-### Phase 4: Write Manifest
+### Phase 5: Write Manifest (the scheduling document)
 
 Load `assets/manifest-template.md`. Fill:
-- **Mode declaration**: `parallel` or `batch`
-- Task Inventory: flat table — ID, slug, batch (if batch mode), owns tests,
-  file ownership, worktree path, branch, depends on (if batch mode),
-  verification command
-- File Ownership Map: proves zero overlap within each batch; cross-batch
-  overlaps are documented
+
+- **Execution model**: DAG — total tasks, total levels
+- Task Inventory: flat table — ID, level, slug, owns tests, depends on,
+  file ownership, worktree path, branch, verification command
+- **Task DAG section**: mermaid diagram, ASCII diagram, edge list
+  (task / depends on / why), level table — the subagent relationships in
+  DAG form
+- File Ownership Map: zero overlap within each level; cross-level overlaps
+  documented
 - Execution Status: pre-filled ⬜ pending (updated by `execute` skill)
 
-### Phase 5: Validate + Confirm
+### Phase 6: Validate + Confirm
 
 Cross-check:
-- **Fully parallel**: Every project file touched → exactly one owner
-- **Batch mode**: Every project file touched → exactly one owner PER BATCH;
-  cross-batch overlaps are explicit and documented
+
+- DAG is acyclic; level assignment consistent with the edge list
+- Every project file touched → exactly one owner per level
 - Every implementation file → its test file owned by the SAME task
 - Every READ file → full content or key excerpts inlined in the consuming task
+- Every Level ≥ 2 task → dependency interface excerpts inlined
 - **All specs fully covered** — every requirement in every spec file is
   addressed by at least one task
-- Every task → can be verified in isolation (for batch 2+ tasks: verifiable
-  after merging prior-batch output)
-- **Batch mode only**: Dependency chain is acyclic — no circular batch
-  dependencies; batch 1 has no Depends On entries
+- Every task → can be verified in isolation at its level (Level ≥ 2 tasks:
+  verifiable after merging earlier-level output)
+- Dependency chain is acyclic — this is the DAG definition; Level 1 has no
+  Depends On entries
 
 Present to user for confirmation.
 
@@ -283,54 +251,56 @@ Present to user for confirmation.
   can (and should) be condensed into a single task when they form a coherent
   vertical slice. The goal is to distill ALL design-phase documents into
   3-5 self-contained tasks, not to produce one task per spec file.
-- **No cross-task dependencies in fully parallel mode.** If you find
-  yourself writing "Task B imports from Task A" or "Task C needs Task D's
-  output" — the split is wrong. Merge them into one task, or restructure so
-  neither needs the other. If merging makes the task too large (>90 min) or
-  unfocused, document the dependency and switch to batch mode. But batch
-  mode is a last resort — always try merging first.
-- **Batch mode is a tax, not a feature.** Every batch adds coordination
-  overhead: sequential wait time, inter-batch merges, and integration
-  complexity. Only use batch mode when ALL remedies (merge, restructure,
-  lazy registration) have been exhausted. A single 90-min task is cheaper
-  than two 30-min tasks in separate batches.
-- **Batch 1 is the foundation — keep it tight.** Only put truly shared
-  infrastructure in batch 1: core types, base classes, database schema,
-  plugin registries. If something COULD live in a feature task's batch,
-  it should. Batch 1 scope creep is the #1 cause of slow batch pipelines.
-- **Cross-batch dependencies must be acyclic.** Batch 2 → Batch 3 is fine.
-  Batch 2 → Batch 1 is circular and means the decomposition is wrong.
-- **Shared entry-point files → one task owns the file.** When multiple specs
-  need to register in a shared file (main.py, __init__.py, route registry),
-  assign that file to exactly ONE task. The owning task creates the skeleton
-  with all registration points. Other tasks create their modules independently
-  and include instructions to append the registration call to the entry-point
-  file during merge — the merge step is the ONLY cross-task coordination, and
-  it happens AFTER all tasks complete independently.
+- **Same-level tasks must never import each other.** If two tasks at the
+  same level share an import, that is a DAG edge you missed — merge them,
+  restructure so neither needs the other, or move one to a later level.
+- **A cycle is a decomposition error, not a scheduling problem.** The DAG
+  model cannot schedule circular dependencies. If you find one, merge the
+  cycle into a single task.
+- **Level 1 is the foundation — keep it tight.** Only put truly shared
+  infrastructure in Level 1: core types, base classes, database schema,
+  plugin registries. If something COULD live in a Level 2 task, it should.
+  Level 1 scope creep is the #1 cause of long pipelines.
+- **Cross-level dependencies must be acyclic — that's the DAG definition.**
+  An edge from a later level back to an earlier level means the levels are
+  wrong.
+- **Shared entry-point files → one task owns the file per level.** When
+  multiple specs need to register in a shared file (main.py, __init__.py,
+  route registry), assign that file to exactly ONE task per level. The
+  owning task creates the skeleton with all registration points. Other tasks
+  create their modules independently and include instructions to append the
+  registration call to the entry-point file during merge — the merge step is
+  the ONLY cross-task coordination, and it happens AFTER all tasks at the
+  level complete independently.
 - **READ is context with content, not just a file path.** READ files are for
-  understanding existing code. Include their full source (or key excerpts) in
-  the TASK.md — don't just list the file path. The subagent in its isolated
-  worktree has the file on disk, but inlining the content ensures the subagent
-  understands WHY this file matters and WHAT parts are relevant.
+  understanding existing code. Include their full source (or key excerpts)
+  in the TASK.md — don't just list the file path. The subagent in its
+  isolated worktree has the file on disk, but inlining the content ensures
+  the subagent understands WHY this file matters and WHAT parts are relevant.
 - **Don't over-decompose.** Each task = 30-60 min for a subagent is fine
   (up to 90 min for merged tasks). Splitting further adds orchestration
   overhead with zero parallelism gain. **Bigger self-contained tasks are
   better than many small interdependent ones.**
 - **Logical independence > file independence.** File-level disjointness is
-  necessary but not sufficient. A task is truly independent only when: (1) its
-  verification command passes with zero other task code present (or, for batch
-  2+ tasks, with prior-batch output merged), (2) its code imports nothing owned
-  by another task in the same batch, and (3) a subagent implementing it never
-  needs to know what other same-batch tasks are doing. If any of these fail,
-  merge tasks until they pass.
-- **Fewer tasks is often better.** 2 large self-contained tasks are better than
-  5 small ones that can't actually run in parallel. Self-containment is the
-  primary goal; task count is secondary. Same applies to batches: 2 batches of
-  2 tasks each is better than 4 batches of 1 task each.
+  necessary but not sufficient. A task is truly independent only when:
+  (1) its verification command passes with zero other same-level task code
+  present (or, for Level ≥ 2 tasks, with all earlier-level output merged),
+  (2) its code imports nothing owned by another task at the same level, and
+  (3) a subagent implementing it never needs to know what other same-level
+  tasks are doing. If any of these fail, merge tasks until they pass.
+- **Fewer tasks is often better — and fewer levels too.** 2 large
+  self-contained tasks are better than 5 small ones that can't actually run
+  in parallel. Same applies to levels: 2 levels of 2 tasks each is better
+  than 4 levels of 1 task each — every level boundary serializes the
+  pipeline.
 
 ## References
 
 - `assets/task-template.md` — Self-contained task structure with placeholders.
-  Load during Phase 3 per task.
-- `assets/manifest-template.md` — Flat manifest: inventory, ownership map,
-  status table. Load during Phase 4.
+  Load during Phase 4 per task.
+- `assets/manifest-template.md` — Scheduling document: task inventory, DAG
+  section (mermaid + ASCII + edge list), ownership map, status table.
+  Load during Phase 5.
+- `references/lazy-registration-pattern.md` — Pattern for shared
+  registry/entry-point files; one of the three remedies before declaring a
+  dependency edge.

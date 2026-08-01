@@ -1,7 +1,7 @@
-# Task {{ID}}: {{Task Name}}{{  [Batch {{N}}]}}
+# Task {{ID}}: {{Task Name}}{{  [Level {{N}}]}}
 
 > **Estimated effort:** {{30-60 min}} — complete vertical slice, self-contained
-{{> **Batch:** {{N}} — depends on prior batch output (see Referenced Code for interfaces)}}
+{{> **Level:** {{N}} — depends on earlier-level output (see Referenced Code for interfaces)}}
 
 ## File Ownership
 
@@ -22,7 +22,7 @@ The subagent needs this to understand existing patterns, conventions, and data
 shapes before writing any code. Copy-paste the actual file content — don't just
 reference the path. The subagent reads THIS inline context, not the file on disk._
 
-{{For batch 2+ tasks, also inline key excerpts from prior-batch files this task
+{{For Level 2+ tasks, also inline key excerpts from dependency tasks' files this task
 depends on — class signatures, function signatures, type definitions, import
 paths. The subagent implements against these interfaces; the actual code will be
 merged into its worktree by execute before the subagent runs.}}
