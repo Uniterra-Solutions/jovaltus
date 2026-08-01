@@ -5,7 +5,7 @@ description: >-
   first. From one-line fixes to full feature builds: the skill internally
   classifies the task and routes to direct implementation (trivial changes),
   a utility skill (debugging, docs, git, agent config), or the Jovaltus
-  pipeline (discuss → design → to-spec → to-tasks → to-environment → execute
+  pipeline (discuss → design → to-spec → to-tasks → execute
   → simplify → review → qa). Trigger on ANY code-related request: build,
   create, implement, add, remove, rename, fix, debug, refactor, change,
   update, write, edit, commit, release, document, 開發, 幫我做, 寫, 改,
@@ -104,7 +104,7 @@ Any change that is NOT in Bucket 1 or Bucket 2. Heuristics:
 Don't ask questions yet. Read the prompt and count how many domains the user
 covered with **concrete, specific detail** — not passing mentions.
 
-The Jovaltus pipeline: `discuss → design → to-spec → to-tasks → to-environment
+The Jovaltus pipeline: `discuss → design → to-spec → to-tasks
 → execute → simplify → review → qa`. Each phase reads the previous phase's
 document, produces its own artifact, and hands off. Documents are the contract
 between phases — no conversation history needed.
@@ -183,9 +183,8 @@ each phase skill should be loaded:
 | Requirements | `discuss` | Vague idea, Level 1, or gaps in prompt | `.plan/<date>/<name>/prd.md` |
 | Technical Design | `design` | PRD approved, Level 2/3 next step | `.plan/<date>/<name>/design.md` |
 | Implementation Spec | `to-spec` | Design approved | `.plan/<date>/<name>/spec.md` |
-| Task Decomposition | `to-tasks` | Spec approved | `.plan/<date>/<name>/tasks.md` |
-| Environment Setup | `to-environment` | Tasks ready | Git worktrees per task |
-| Implementation | `execute` | Environments ready | Code changes per task |
+| Task Decomposition | `to-tasks` | Spec approved | `.plan/<date>/<name>/tasks.md` (manifest with task DAG) |
+| Implementation | `execute` | Tasks ready (DAG manifest) | Worktrees + DAG-ordered code changes per task |
 | Simplification | `simplify` | Code implemented | Simplified code (behaviour preserved) |
 | Review | `review` | Code simplified | Review report + fixes |
 | QA | `qa` | Review passed | QA report + fixes + regression tests |

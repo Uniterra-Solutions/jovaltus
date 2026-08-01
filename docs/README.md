@@ -1,8 +1,8 @@
 # Jovaltus — Documentation
 
-Jovaltus is a Hermes plugin that bundles 14 agent skills for a complete
+Jovaltus is a Hermes plugin that bundles 13 agent skills for a complete
 development pipeline (discuss → design → to-spec → to-tasks →
-to-environment → execute → simplify → review → qa) plus 4 utility skills.
+execute → simplify → review → qa) plus 4 utility skills.
 
 ---
 

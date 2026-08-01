@@ -1,6 +1,6 @@
 # Jovaltus — Hermes Plugin for Skill-Driven Development
 
-> **Jovaltus** bundles 14 agent skills that guide an orchestrator through a
+> **Jovaltus** bundles 13 agent skills that guide an orchestrator through a
 > complete development pipeline — from requirements discovery to parallel
 > execution, adversarial review, and PRD-driven QA. The plugin itself is
 > minimal; the skills do the work.
@@ -15,7 +15,7 @@ Direct Delegate Pattern**. The plugin no longer exposes tools
 bundles self-contained skills that the orchestrator loads at each phase.
 
 ```
-discuss → design → to-spec → to-tasks → to-environment → execute → simplify → (review → merge → qa)
+discuss → design → to-spec → to-tasks → execute → simplify → (review → merge → qa)
 ```
 
 Every skill is independently loadable via `skill_view()`. The orchestrator
@@ -45,22 +45,26 @@ acceptance criteria. Agents can implement without follow-up questions.
 
 ### Phase 4: `to-tasks` — Task Decomposition
 
-Decomposes specs into flat, independent task files. Every task owns
-disjoint files — zero shared write targets. Cross-task dependencies
-resolved via inlined interface contracts. Produces manifest + per-task
-files under `.plan/<date>/<name>/tasks/`.
+Decomposes specs into tasks and a scheduling document. The manifest
+expresses every subagent relationship as a **DAG**: nodes = tasks,
+directed edges = dependencies, levels = topological layers. Same-level
+tasks own disjoint files and run in parallel; later levels consume
+earlier levels' output. Produces manifest + per-task files under
+`.plan/<date>/<name>/tasks/`.
 
-### Phase 5: `to-environment` — Worktree Isolation
+### Phase 5: `execute` — DAG Dispatch
 
-Creates isolated git worktrees per task with sparse-checkout scoped to
-only the files that task needs. Blast-radius analysis for brownfield
-projects. Produces worktrees under `.worktrees/`.
+Creates one isolated sparse-checkout worktree per task, then dispatches
+subagents level by level via `terminal(background=true)`. All tasks at a
+level run simultaneously; each level's branches merge into an integration
+branch so the next level's subagents see real prior output. Failed tasks
+block their dependents. Updates manifest execution status.
 
-### Phase 6: `execute` — Parallel Dispatch
+### Phase 6: `simplify` — Code Simplification
 
-Spawns subagents into all worktrees simultaneously via
-`terminal(background=true)`. All tasks run concurrently because file
-ownership is proven disjoint. Updates manifest execution status.
+Simplifies implemented code without changing behaviour. Dispatches a
+simplify subagent per worktree (or Direct Changes mode for single-subagent
+cleanup).
 
 ### Phase 7: `review` — Adversarial Code Review
 
@@ -77,21 +81,23 @@ with regression tests; loops until all requirements pass.
 
 ---
 
-## Bundled Skills (11 total)
+## Bundled Skills (13 total)
 
 | Skill | Type | Purpose |
 |-------|------|---------|
+| `jovaltus` | Pipeline | Core router — triage Direct / Utility / Pipeline |
 | `discuss` | Pipeline | Interactive requirements → PRD |
 | `design` | Pipeline | Dialectical technical design |
 | `to-spec` | Pipeline | PRD + design → implementation specs |
-| `to-tasks` | Pipeline | Flat, independent task decomposition |
-| `to-environment` | Pipeline | Isolated git worktrees per task |
-| `execute` | Pipeline | Parallel subagent dispatch |
+| `to-tasks` | Pipeline | Task decomposition — DAG manifest of subagent relationships |
+| `execute` | Pipeline | DAG dispatch — worktrees + level-parallel subagents |
+| `simplify` | Pipeline | Code simplification (behaviour preserved) |
 | `review` | Pipeline | Adversarial 4-layer code review |
 | `qa` | Pipeline | PRD-driven acceptance testing |
 | `agentic-debugging` | Utility | 5-phase evidence-driven debugging |
 | `manage-agents-md` | Utility | AGENTS.md creation, audit, maintenance |
 | `project-documentation` | Utility | Multi-file docs/ tree generation |
+| `manage-git-repo` | Utility | Commit, release, branch+PR, stacked PR |
 
 ---
 
@@ -184,7 +190,7 @@ hermes -p jovaltus-agent
 #    「load skill discuss」
 
 # 3. 按順序載入：discuss → design → to-spec → to-tasks
-#    → to-environment → execute → simplify → review → qa
+#    → execute → simplify → review → qa
 
 # 每個 skill 會指導你完成該階段，產出對應的 artifacts
 ```
@@ -208,7 +214,7 @@ Jovaltus v0.6.0 is not a pipeline engine — it's a skill bundle. The plugin:
 
 1. **Self-bootstraps** fabricium on import (survives Hermes venv recreation)
 2. **Registers CLI commands** via `fabricium.HermesPlugin` (`setup`, `status`, `update`)
-3. **Bundles 14 skills** auto-discovered by Fabricium from `src/jovaltus/skills/`
+3. **Bundles 13 skills** auto-discovered by Fabricium from `src/jovaltus/skills/`
 
 That's it. No tools, no state machine, no hooks, no subagent spawning logic.
 The orchestrator loads skills and follows their guidance.
@@ -217,7 +223,7 @@ The orchestrator loads skills and follows their guidance.
 
 | Old (v0.5.x) | New (v0.6.0) |
 |---------------|---------------|
-| 3 tools + state machine + hooks + schemas | 14 self-contained skills |
+| 3 tools + state machine + hooks + schemas | 13 self-contained skills |
 | ~2,200 lines of Python | ~55 lines of Python |
 | Pipeline hardcoded in tool handlers | Pipeline defined by skill documents |
 | Edit prompts → edit Python | Edit skills → edit Markdown |
@@ -237,18 +243,20 @@ jovaltus/
 │   ├── __init__.py          # Entry point (55 lines) — fabricium self-bootstrap + HermesPlugin
 │   ├── plugin.yaml          # Plugin metadata
 │   ├── SOUL.md              # Agent identity
-│   └── skills/              # 11 bundled skills (8 pipeline + 3 utility)
+│   └── skills/              # 13 bundled skills (9 pipeline + 4 utility)
+│       ├── jovaltus/        # Core router — triage + pipeline entry
 │       ├── discuss/         # Requirements discovery → PRD
 │       ├── design/          # Dialectical technical design
 │       ├── to-spec/         # PRD → implementation specs
-│       ├── to-tasks/        # Flat task decomposition
-│       ├── to-environment/  # Git worktree isolation
-│       ├── execute/         # Parallel subagent dispatch
+│       ├── to-tasks/        # Task decomposition — DAG manifest
+│       ├── execute/         # DAG dispatch + worktree setup
+│       ├── simplify/        # Code simplification
 │       ├── review/          # Adversarial code review
 │       ├── qa/              # PRD-driven acceptance testing
 │       ├── agentic-debugging/
 │       ├── manage-agents-md/
-│       └── project-documentation/
+│       ├── project-documentation/
+│       └── manage-git-repo/
 ├── tests/
 │   ├── test_git_utils.py    # 18 tests
 │   ├── test_sync.py         # 8 tests

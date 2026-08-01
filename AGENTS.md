@@ -23,8 +23,8 @@
 - `src/jovaltus/__init__.py` — Plugin entry point: self-bootstraps fabricium, delegates to `HermesPlugin`
 - `src/jovaltus/plugin.yaml` — Plugin metadata (name, version, description)
 - `src/jovaltus/SOUL.md` — Agent identity file applied during `hermes jovaltus setup`
-- `src/jovaltus/skills/` — 14 bundled agent skills (10 pipeline + 4 utility):
-  - **Pipeline**: `jovaltus` (core) → `discuss` → `design` → `to-spec` → `to-tasks` → `to-environment` → `execute` → `simplify` → `review` + `qa`
+- `src/jovaltus/skills/` — 13 bundled agent skills (9 pipeline + 4 utility):
+  - **Pipeline**: `jovaltus` (core) → `discuss` → `design` → `to-spec` → `to-tasks` → `execute` → `simplify` → `review` + `qa`
   - **Utility**: `agentic-debugging`, `manage-agents-md`, `project-documentation`, `manage-git-repo`
 - `tests/` — 39 pytest tests across 4 test files + conftest
   - `test_git_utils.py` (18), `test_sync.py` (8)
@@ -44,12 +44,16 @@ handlers; it bundles agent skills that guide the orchestrator through each phase
 ## Pipeline (Skill-Driven)
 
 ```
-jovaltus (core) → discuss → design → to-spec → to-tasks → to-environment → execute → simplify → review → qa
+jovaltus (core) → discuss → design → to-spec → to-tasks → execute → simplify → review → qa
 ```
 
-All tasks run in parallel (flat architecture) — file ownership is proven disjoint.
-Every task is a closed, logically independent system: no task imports from or
-depends on another task's output.
+The task manifest produced by `to-tasks` is a **DAG**: tasks are nodes,
+directed edges express dependencies, and each task is assigned a topological
+level. `execute` dispatches level by level — all tasks at the same level run
+in parallel, levels run sequentially, and each level's output is merged into
+an integration branch before the next level starts. File ownership is proven
+disjoint within each level; a zero-edge DAG (everything at Level 1) is fully
+parallel.
 
 ## CLI Commands
 

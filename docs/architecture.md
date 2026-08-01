@@ -1,6 +1,6 @@
 # Architecture — Jovaltus
 
-Jovaltus is a Hermes plugin that bundles 14 agent skills for a complete
+Jovaltus is a Hermes plugin that bundles 13 agent skills for a complete
 development pipeline. The plugin itself is minimal (~55 lines of Python);
 all behavior is defined in skill documents.
 
@@ -31,7 +31,7 @@ their guidance to drive the development pipeline.
 
 ```mermaid
 graph TD
-    Orch -->|skill_view| Skills[Bundled Skills 14x]
+    Orch -->|skill_view| Skills[Bundled Skills 13x]
     Orch -->|terminal bg| Sub[Subagent]
     Sub -->|git| WT[Worktree]
     Fabricium[Fabricium SDK] -->|HermesPlugin| CLI[CLI Commands]
@@ -41,7 +41,7 @@ graph TD
 
 | Container | Technology | Purpose |
 |-----------|-----------|---------|
-| Bundled Skills | Markdown (SKILL.md) | 14 self-contained skill documents — pipeline phases + utilities |
+| Bundled Skills | Markdown (SKILL.md) | 13 self-contained skill documents — pipeline phases + utilities |
 | Orchestrator | Hermes agent | Loads skills, spawns subagents, controls pipeline flow |
 | Subagent Process | Hermes `terminal(background=true)` | Isolated execution in worktree; implements, reviews, tests |
 | Fabricium SDK | `fabricium` pkg | `git_utils`, `HermesPlugin` (CLI + skill auto-discovery), `SkillEvalHarness` |
@@ -50,7 +50,7 @@ graph TD
 ## Pipeline Flow (Skill-Driven)
 
 ```
-jovaltus (core) → discuss → design → to-spec → to-tasks → to-environment → execute → simplify → review → qa
+jovaltus (core) → discuss → design → to-spec → to-tasks → execute → simplify → review → qa
 ```
 
 The orchestrator loads one skill at a time. Each skill describes:
@@ -69,25 +69,29 @@ guidance, produces the artifact, then loads the next skill.
 | 1 | `discuss` | User idea | `prd.md` | No |
 | 2 | `design` | PRD | `design.md` | No |
 | 3 | `to-spec` | PRD + design | Implementation specs | No |
-| 4 | `to-tasks` | Specs | Manifest + task files (parallel or batch mode) | No |
-| 5 | `to-environment` | Manifest | Git worktrees | No |
-| 6 | `execute` | Worktrees | Implemented code | Yes (parallel or batch) |
-| 7 | `simplify` | Implemented code | Simplified code (behaviour preserved) | Yes |
-| 8 | `review` | Simplified code | Reviewed + merged code | Yes (per worktree) |
-| 9 | `qa` | Merged code | QA report | Yes |
+| 4 | `to-tasks` | Specs | Manifest (task DAG) + task files | No |
+| 5 | `execute` | Manifest + DAG | Worktrees + implemented code | Yes (level-parallel) |
+| 6 | `simplify` | Implemented code | Simplified code (behaviour preserved) | Yes |
+| 7 | `review` | Simplified code | Reviewed + merged code | Yes (per worktree) |
+| 8 | `qa` | Merged code | QA report | Yes |
 
-### Parallel Execution Model
+### DAG Execution Model
 
-The `execute` phase is **flat-parallel**: all tasks run simultaneously because
-file ownership is proven disjoint by `to-tasks`. Cross-task dependencies are
-resolved via **inlined interface contracts** (function signatures, types) in
-each TASK.md — no runtime coupling, no task-to-task communication.
+`to-tasks` expresses every subagent relationship as a **DAG** in the manifest:
+tasks are nodes, directed edges are dependencies, and each task gets a
+topological level (`1 + max(dep levels)`). `execute` dispatches level by
+level — all tasks at the same level run simultaneously because file ownership
+is proven disjoint within the level; levels run sequentially, and each
+level's branches are merged into an integration branch so the next level's
+subagents consume real prior output, not stubs. A zero-edge DAG (everything
+at Level 1) is the classic fully-parallel run.
 
 ```
-to-tasks proves no file overlaps
-    → to-environment creates isolated worktrees
-        → execute spawns N subagents simultaneously
-            → all commit independently, zero merge conflicts
+to-tasks produces the DAG manifest (nodes + edges + levels)
+    → execute creates isolated worktrees per task
+        → Level 1 tasks spawn simultaneously
+            → levels merge into integration branch, next level spawns
+                → all commit independently, zero merge conflicts per level
 ```
 
 ## Plugin Architecture
@@ -126,7 +130,7 @@ def register(ctx):
 | Decision | Rationale | Status |
 |----------|-----------|--------|
 | Skill-driven, not engine-driven | Pipeline flexibility; skills editable without touching Python | Active |
-| Flat-parallel execution | File ownership proven disjoint → zero merge conflicts | Active |
+| DAG execution | Same-level tasks parallel (disjoint ownership); cross-level sequential via integration merges | Active |
 | Fabricium as sole dependency | Avoids duplicating git wrappers, CLI registration, and skill bundling | Active |
 | Self-bootstrap fabricium on import | Hermes may recreate venv, dropping plugin deps; repair on first import | Active |
 | Minimal plugin (< 60 lines) | Plugin is glue; skills contain all behavior | Active |

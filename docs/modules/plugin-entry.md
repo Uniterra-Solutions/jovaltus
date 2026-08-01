@@ -73,7 +73,7 @@ The plugin is 55 lines of glue code.
 
 ```yaml
 name: jovaltus
-version: 0.13.1
+version: 0.14.0
 description: Jovaltus Agent Mode — automated development pipeline skills and CLI
 author: LaiTszKin
 ```
@@ -89,17 +89,19 @@ available via short name when loaded from a profile with the plugin enabled.
 
 | Skill Directory | Registered Name | Type |
 |----------------|-----------------|------|
+| `skills/jovaltus/` | `jovaltus` | Pipeline |
 | `skills/discuss/` | `discuss` | Pipeline |
 | `skills/design/` | `design` | Pipeline |
 | `skills/to-spec/` | `to-spec` | Pipeline |
 | `skills/to-tasks/` | `to-tasks` | Pipeline |
-| `skills/to-environment/` | `to-environment` | Pipeline |
 | `skills/execute/` | `execute` | Pipeline |
+| `skills/simplify/` | `simplify` | Pipeline |
 | `skills/review/` | `review` | Pipeline |
 | `skills/qa/` | `qa` | Pipeline |
 | `skills/agentic-debugging/` | `agentic-debugging` | Utility |
 | `skills/manage-agents-md/` | `manage-agents-md` | Utility |
 | `skills/project-documentation/` | `project-documentation` | Utility |
+| `skills/manage-git-repo/` | `manage-git-repo` | Utility |
 
 ## Module Boundaries
 
