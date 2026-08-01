@@ -1,125 +1,173 @@
 ---
 name: execute
 description: >
-  Dispatches subagents into prepared git worktrees. Two dispatch modes:
-  (1) Fully Parallel — all tasks spawn simultaneously (manifest proves
-  disjoint file ownership). (2) Batch — sequential batch dispatch with
-  inter-batch merges, for tasks with documented cross-batch dependencies.
-  Updates manifest execution status. Reports pass/fail per task.
+  Dispatches subagents according to the manifest's task DAG. Reads the DAG
+  (nodes = tasks, directed edges = dependencies, levels = topological
+  layers), creates one isolated sparse-checkout worktree per task, then runs
+  level-parallel dispatch: all tasks at a level spawn simultaneously via
+  terminal(background=true); levels execute sequentially; each level's
+  branches merge into an integration branch so the next level's subagents
+  see real prior output. Failed tasks block their dependents. Updates
+  manifest execution status. Reports pass/fail per task.
 
   LOAD when:
-  - Worktrees exist under .worktrees/ and manifest exists
-  - User says "execute" or "run the tasks" or "dispatch" or "執行"
-  - Ready to spawn subagents from prepared worktrees
+  - A manifest with a task DAG exists (under .plan/.../tasks/manifest.md)
+  - User says "execute" or "run the tasks" or "dispatch" or "執行" or
+    "派出subagent"
   Do NOT use for:
-  - Creating tasks or worktrees (use to-tasks, to-environment)
+  - Creating tasks (use to-tasks)
   - Running a single task manually
-  - Tasks without manifest + worktrees already prepared
+  - Tasks without a manifest + DAG
 ---
 
 # Execute
 
 ## Goal
 
-Dispatch subagents into prepared worktrees. In fully parallel mode, all
-tasks run simultaneously — safe because the manifest proves disjoint file
-ownership. In batch mode, tasks within a batch run in parallel; batches
-execute sequentially with inter-batch merges so later batches consume
-earlier batches' output.
+Dispatch subagents according to the task DAG in the manifest. The DAG is the
+schedule: same-level tasks run in parallel, levels run sequentially in
+topological order, and each level's output is merged into an integration
+branch so the next level's subagents consume real interfaces — not stubs.
 
-## Two Modes
+This skill also creates the worktree environments (absorbing the former
+`to-environment` phase): one isolated sparse-checkout worktree per task,
+seeded with its TASK.md, config, and relevant project docs.
 
-### Mode 1: Fully Parallel (Default)
+## The Dispatch Model
 
-All tasks dispatched at once. The file ownership map proves zero shared
-write targets — parallel execution is safe by construction. All tasks
-start simultaneously; results collected as they complete.
-
-### Mode 2: Batch Execution
-
-Tasks dispatched in sequential batches. Within each batch, tasks are
-parallel-safe (disjoint files). Between batches, later batches depend
-on earlier batches' output.
-
-**Batch dispatch loop:**
-1. Dispatch all tasks in Batch N in parallel
-2. Wait for all Batch N tasks to complete
-3. If all passed: merge Batch N branches into an integration branch,
-   then rebase Batch N+1 worktrees onto the integration branch
-4. Dispatch Batch N+1
-5. Repeat until all batches done
+- **Level 1** tasks have no dependencies — dispatched immediately, in
+  parallel, from the base repo.
+- **Level N** tasks depend on Level 1..N-1 output. Their worktrees are
+  rebased onto the integration branch (which has accumulated all prior
+  levels' merged branches) before their subagents start.
+- **Within a level**: full parallel dispatch — all tasks spawn at once,
+  no concurrency cap.
+- **A failed task blocks its dependents** — downstream levels wait; the
+  orchestrator asks retry / skip / halt before proceeding.
 
 ## Acceptance Criteria
 
-- Every manifest task is dispatched
-- **Fully parallel**: All run simultaneously via `terminal(background=true, workdir=<path>)`
-- **Batch**: Tasks within each batch run in parallel; batches run sequentially
-- **Batch**: Inter-batch merges applied — batch N+1 worktrees contain
-  batch 1..N code before their subagents start
+- Every manifest task is dispatched, in topological order
+- All tasks at the same level run simultaneously via
+  `terminal(background=true, workdir=<path>)`
+- Level N worktrees contain Level 1..N-1 output (integration branch) before
+  their subagents start
 - Each subagent locked to its worktree — cannot escape to parent
 - Failed tasks identified + reported; orchestrator asks: retry, skip, halt
 - Manifest status table updated as tasks complete
 
 ## Core Principles
 
-**Flat parallel dispatch (same batch).** Within a batch, all tasks start
-at once. The file ownership map proves zero shared write targets within
-the batch — parallel execution is safe by construction.
+**The DAG is the schedule.** Parse the manifest's DAG, verify acyclicity,
+read (or recompute) the levels. Dispatch is level by level: parallel within,
+sequential across. Never dispatch a task before its dependencies pass.
 
-**hermes chat -q, not delegate_task.** `delegate_task` doesn't support
+**`hermes chat -q`, not `delegate_task`.** `delegate_task` doesn't support
 per-subagent workdir. `terminal(workdir=<path>, background=true)` isolates
 each subagent to its worktree. Trade-off: losing `delegate_task`'s inline
 summary, but the subagent's final reply serves the same purpose.
 
-**3-5 concurrent is the sweet spot.** More than 5 risks API rate limits,
-context pressure, and disk I/O contention. In batch mode, this applies
-per-batch — batch 1 with 3 tasks + batch 2 with 3 tasks = 6 total across
-two sequential waves.
+**No concurrency cap within a level.** `terminal(background=true)` has no
+parallel limit. Dispatch ALL tasks at the current level in one batch — don't
+stagger, don't create waves. (The "3-5 concurrent" myth comes from
+`delegate_task`'s `max_concurrent_children` config, which this flow doesn't
+use.)
 
-**Worktree is the isolation boundary.** The subagent sees only files in
-its worktree. No coordination with siblings — impossible within the same
-batch because file ownership is disjoint by construction.
+**Worktree is the isolation boundary.** The subagent sees only files in its
+worktree. Same-level siblings cannot conflict because file ownership is
+disjoint by construction; cross-level files appear via the integration
+branch rebase.
 
-**Inter-batch merge is the handoff.** The ONLY cross-batch coordination is
-the merge step between batches. After batch N completes, merge its branches
-into a shared integration branch, then rebase batch N+1 worktrees onto it.
-Batch N+1 subagents then have all prior-batch code available.
+**Inter-level merge is the handoff.** The ONLY cross-level coordination is
+the merge step between levels. After level N completes, merge its branches
+into the integration branch, then rebase level N+1 worktrees onto it.
+
+**Environment creation is part of execute.** The separate `to-environment`
+phase no longer exists. One sparse-checkout worktree per task, on branch
+`agent/<id>-<slug>`, containing only what the subagent needs: CREATE/EDIT
+source files, config for the verification command, relevant project docs,
+and TASK.md. See `assets/worktree-config.md` for exact commands.
 
 ## Prerequisites
 
-1. Manifest at `.plan/<DD-MM-YYYY>/<name>/tasks/manifest.md` — must
-   declare mode (`parallel` or `batch`)
-2. Worktrees at `.worktrees/<id>-<slug>/` with `TASK.md`
-3. `hermes` CLI in PATH
-4. **Batch mode only**: `git` CLI available for inter-batch merges
+1. Manifest at `.plan/<DD-MM-YYYY>/<name>/tasks/manifest.md` — declares the
+   task DAG (nodes, edges, levels)
+2. `hermes` CLI in PATH
+3. `git` CLI available for worktree creation + inter-level merges
 
 ## Workflow
 
-### Phase 0: Read Manifest + Determine Mode
+### Phase 0: Read Manifest + Parse DAG
 
-Read the manifest. Extract: mode declaration, task inventory, batch
-groupings (if batch mode), file ownership map.
+Read the manifest. Extract: task inventory (id, slug, level, depends on,
+verification command, worktree path, branch), the edge list, and the file
+ownership map.
 
-**Fully parallel**: proceed to Phase 1 (Dispatch All).
-**Batch**: proceed to Phase B1 (Batch Dispatch Loop).
+Validate:
+- DAG is acyclic
+- Level assignment matches the edges (every edge points to a higher level)
+- Zero file ownership overlaps within each level
+
+Any check fails → stop; the manifest is broken. Tell the user to re-run
+`to-tasks`.
+
+### Phase 1: Create Environments (worktrees)
+
+For every task, create its worktree:
+
+1. `git worktree add .worktrees/<id>-<slug> -b agent/<id>-<slug>` — use
+   `--no-checkout` + sparse-checkout so only the task's files are present
+2. Sparse-checkout includes: CREATE/EDIT source files, config the
+   verification command needs (pyproject.toml / package.json / conftest.py),
+   and project conventions (AGENTS.md / CLAUDE.md). Exclude unrelated code,
+   docs, and other tasks' files.
+3. Copy the task file to `TASK.md` in the worktree.
+4. Install dependencies the verification command needs (`uv sync --all-extras`
+   / `pnpm install` etc.). Level ≥ 2 worktrees need a re-sync after the
+   integration rebase in Phase 2 Step 1.
+
+See `assets/worktree-config.md` for exact git syntax and blast-radius
+discovery patterns.
+
+### Phase 2: Dispatch Loop (per level)
+
+For each level L = 1, 2, ..., N:
 
 ---
 
-### Fully Parallel Workflow
+**Step 1: Rebase level L worktrees (skip L=1)**
 
-#### Phase 1: Verify Manifest
+Level 1 worktrees already contain the base repo — no rebase needed. For
+level L ≥ 2, each worktree needs all prior-level code:
 
-Confirm file ownership map has zero overlaps. If any file has two owners
-→ stop; manifest is broken. Tell the user to re-run `to-tasks`.
+```bash
+for worktree in .worktrees/<level-L-task-ids>; do
+    cd "$worktree"
+    git fetch origin agent/integration-{{plan-slug}}
+    git rebase agent/integration-{{plan-slug}}
+done
+```
 
-#### Phase 2: Dispatch All Tasks
+This pulls all level 1..L-1 code into level L's worktrees. After rebase,
+level L subagents can import and use code from earlier levels.
 
-For every task, spawn simultaneously:
+⚠️ **Rebase conflicts**: if a rebase fails, the level's worktree conflicts
+with prior-level output. This should not happen if `to-tasks` validated
+ownership per level, but if it does: stop, report the conflict, and let the
+user decide whether to resolve manually or re-decompose.
+
+---
+
+**Step 2: Dispatch level L tasks**
+
+All tasks at level L spawn simultaneously — no concurrency cap:
 
 ```bash
 terminal(
     command="hermes chat -q 'Read TASK.md. Implement everything specified.
-Work only in this directory. Run the verification command when done.'",
+The worktree contains code from earlier levels (merged via the integration
+branch). Work only in this directory. Run the verification command when
+done.'",
     workdir=".worktrees/<id>-<slug>",
     background=true,
     notify_on_complete=true,
@@ -127,199 +175,116 @@ Work only in this directory. Run the verification command when done.'",
 )
 ```
 
-Collect session_id per task. Mark all 🟡 running in manifest.
-
-#### Phase 3: Collect Results
-
-For each process: `process(action='wait', session_id=<id>)`. Check exit
-code: 0 → 🟢 passed, non-zero → 🔴 failed. Update manifest status.
-
-#### Phase 4: Report
-
-Print summary — task ID, status, file count, test output. For failed
-tasks, show subagent final output so user can diagnose.
-
-#### Phase 5: Handle Failures
-
-Ask user: retry (re-dispatch, maybe with modified TASK.md), skip (leave
-for manual fix), or halt (stop pipeline).
+Collect session_id per task. Mark level L tasks 🟡 running in manifest.
 
 ---
 
-### Batch Execution Workflow
+**Step 3: Wait + update status**
 
-#### Phase B0: Verify Manifest
-
-Confirm:
-- Mode declared as `batch`
-- Batch groupings are non-empty and sequential (1, 2, 3, ...)
-- Within each batch, file ownership map has zero overlaps
-- Depends On entries reference only tasks in prior batches
-- No circular dependencies
-
-If any check fails → stop; manifest is broken.
-
-#### Phase B1: Create Integration Branch
-
-Create an integration branch that will accumulate all batch output:
-
-```bash
-git branch agent/integration-{{plan-slug}} HEAD
-```
-
-This branch starts at the same base as all task branches. After each
-batch completes, its task branches are merged into this integration
-branch. The integration branch serves as the rebase target for the
-next batch's worktrees.
-
-#### Phase B2: Dispatch Batch Loop
-
-For each batch B = 1, 2, ..., N:
+`process(action='wait', session_id=<id>)` for each task in the level. Check
+exit codes. Update manifest: 🟢 passed or 🔴 failed.
 
 ---
 
-**Step 1: Rebase worktrees (skip for batch 1)**
+**Step 4: Handle failures**
 
-Batch 1 worktrees already contain the base repo — no rebase needed.
-
-For batch B ≥ 2: each worktree needs prior-batch code. Rebase each
-batch B worktree onto the integration branch:
-
-```bash
-for worktree in .worktrees/<batch-B-task-ids>; do
-    cd "$worktree"
-    git fetch origin agent/integration-{{plan-slug}}
-    git rebase agent/integration-{{plan-slug}}
-done
-```
-
-This pulls all batch 1..B-1 code into batch B's worktrees. After rebase,
-batch B subagents can import and use code from earlier batches.
-
-⚠️ **Rebase conflicts**: If a rebase fails, it means batch B's worktree
-has changes that conflict with prior-batch output. This should not happen
-if `to-tasks` correctly validated disjoint ownership within each batch,
-but if it does: stop, report the conflict, and let the user decide
-whether to manually resolve or re-decompose.
-
----
-
-**Step 2: Dispatch batch B tasks**
-
-Same as fully parallel Phase 2, but only for this batch's tasks:
-
-```bash
-for task in <batch-B-task-ids>; do
-    terminal(
-        command="hermes chat -q 'Read TASK.md. Implement everything specified.
-The worktree already contains code from prior batches (merged via git rebase).
-Work only in this directory. Run the verification command when done.'",
-        workdir=".worktrees/<id>-<slug>",
-        background=true,
-        notify_on_complete=true,
-        timeout=1800
-    )
-done
-```
-
-Collect session_ids. Mark batch B tasks 🟡 running in manifest.
-
----
-
-**Step 3: Wait for batch B completion**
-
-`process(action='wait', session_id=<id>)` for each task in the batch.
-Check exit codes. Update manifest: 🟢 passed or 🔴 failed.
-
----
-
-**Step 4: Handle batch B failures**
-
-If any task in batch B failed:
+If any task at level L failed:
 - Report which tasks failed and their output
-- Ask user: retry failed tasks (re-dispatch within same batch context),
-  skip (continue with remaining batches anyway — risky), or halt
+- Ask user: retry (re-dispatch, maybe with modified TASK.md), skip
+  (continue with remaining levels anyway — risky, dependents will break),
+  or halt (stop pipeline)
 
-If user chooses to continue after a failure: do NOT merge failed task
-branches into integration. Only merge passed tasks. Document the skip.
+If the user chooses to continue after a failure: do NOT merge failed task
+branches into the integration branch. Document the skip. **Failed tasks
+block dependents** — any later-level task depending on a failed task cannot
+proceed; flag this to the user before dispatching the next level.
 
 ---
 
-**Step 5: Merge batch B into integration (if all passed)**
+**Step 5: Merge level L into integration**
 
-If all batch B tasks passed:
+If all level L tasks passed (or the user chose to skip failed ones):
 
 ```bash
 git checkout agent/integration-{{plan-slug}}
-for task in <batch-B-task-ids>; do
-    git merge agent/<id>-<slug> --no-ff -m "merge(batch-{{B}}): {{task-slug}}"
+for task in <level-L-task-ids>; do
+    git merge agent/<id>-<slug> --no-ff -m "merge(level-{{L}}): {{task-slug}}"
 done
 ```
 
-If some tasks failed and user chose to skip them: merge only the passed
+If some tasks failed and the user chose to skip them: merge only the passed
 task branches. Document which tasks were skipped in the manifest.
 
-⚠️ **Merge conflicts**: Merging task branches from the same batch should
-never conflict (disjoint file ownership within batch). If a conflict
-occurs, the manifest's file ownership validation was wrong — stop and
-investigate.
+⚠️ **Merge conflicts**: merging task branches from the same level should
+never conflict (disjoint file ownership within level). If a conflict occurs,
+the manifest's ownership validation was wrong — stop and investigate.
 
 ---
 
-**Step 6: Next batch**
+**Step 6: Next level** — return to Step 1 for level L+1. After the last
+level, proceed to Phase 3.
 
-Return to Step 1 for batch B+1. If this was the last batch, proceed to
-Phase B3.
+### Phase 3: Final Report
 
-#### Phase B3: Final Report
-
-Print per-batch summary:
-- Batch 1: T1 🟢, T2 🟢 (2/2 passed)
-- Batch 2: T3 🟢, T4 🔴 (1/2 passed)
+Print per-level summary:
+- Level 1: T1 🟢, T2 🟢 (2/2 passed)
+- Level 2: T3 🟢, T4 🔴 (1/2 passed)
 - ...
 
-Show overall: N tasks, K passed, M failed. For failed tasks, include
-subagent final output.
+Overall: N tasks, K passed, M failed. For failed tasks, include subagent
+final output.
 
-#### Phase B4: Handle Failures
+### Phase 4: Handle Failures
 
-Same as fully parallel Phase 5 — ask user for each failed task: retry,
-skip, or halt.
+Same as Phase 2 Step 4 — ask user for each failed task: retry, skip, or
+halt.
 
 ---
 
 ## Gotchas
 
-- **Subagent has no awareness of siblings in the same batch.** They don't
+- **Subagent has no awareness of same-level siblings.** They don't
   coordinate and can't conflict because the file ownership map is disjoint
-  within each batch.
-- **In batch mode, subagents DO see prior-batch code.** After the rebase
-  step (B2 Step 1), batch 2+ worktrees contain all prior-batch output.
-  Subagents implement against real interfaces, not stubs.
-- **Batch mode doubles wall-clock time per batch.** Two batches of 30-min
-  tasks = ~60 min minimum (batch 1 → merge → batch 2). Three batches =
-  ~90 min. This is why batch mode is a last resort.
-- **`terminal(background=true)` returns immediately.** The `session_id`
-  is your handle. Use `process(action='wait', session_id=<id>)` to block.
+  within each level.
+- **Subagents DO see earlier-level code.** After the rebase step (Phase 2
+  Step 1), level L ≥ 2 worktrees contain all prior-level output. Subagents
+  implement against real interfaces, not stubs.
+- **`terminal(background=true)` returns immediately.** The `session_id` is
+  your handle. Use `process(action='wait', session_id=<id>)` to block.
 - **Timeout.** Default 180s is too short. Set `timeout=1800` (30 min).
 - **Subagent model.** Uses same model as parent. For cost savings, set
   `HERMES_MODEL` to a cheaper model before dispatch.
-- **Stale worktrees.** Always run `to-environment` before `execute` if
-  manifest was regenerated.
+- **Stale worktrees.** If the manifest was regenerated, remove old worktrees
+  (`git worktree remove --force` + `git worktree prune`) before Phase 1.
 - **Integration branch is temporary.** `agent/integration-{{plan-slug}}`
-  exists only for the duration of batch dispatch. It can be deleted after
-  all batches complete and results are merged into the main branch.
+  exists only for the duration of dispatch. It can be deleted after all
+  levels complete and results are merged into the main branch.
 - **Rebase vs merge into worktrees.** Rebase is used (not merge) when
-  pulling integration into batch N worktrees because it produces a clean
+  pulling integration into level N worktrees because it produces a clean
   linear history and avoids merge commits inside task branches. Each task
   branch should contain only that task's commits.
+- **Environment setup is part of execute now.** The old `to-environment`
+  phase is gone — do not ask the user to "prepare environments" as a
+  separate step. Phase 1 handles worktree creation inside this skill.
+- **Sparse-checkout minimalism.** Include only what the subagent needs:
+  CREATE/EDIT files, config for the verification command, and
+  AGENTS.md/CLAUDE.md. Never create full-repo worktrees — they waste
+  context. See `assets/worktree-config.md` for cone vs non-cone modes.
 - **Interface contracts reduce integration risk, not eliminate it.** Two
-  tasks in different batches agreeing on a contract will both pass in
-  isolation, but an integration test after merging all batches is still
+  tasks in different levels agreeing on a contract will both pass in
+  isolation, but an integration test after merging all levels is still
   recommended.
 - **Cleanup is NOT auto.** Execute stops at completion. Merge, worktree
   removal, and branch deletion happen in `review` phase.
-- **Failed batch tasks block downstream.** If T1 in batch 1 fails and
-  T3 in batch 2 depends on T1, T3 cannot proceed. Either retry T1 or
-  restructure T3 to not depend on T1. The orchestrator should flag this
-  and ask the user before dispatching batch 2.
+- **Failed tasks block downstream.** If T1 at level 1 fails and T3 at level
+  2 depends on T1, T3 cannot proceed. Either retry T1 or restructure T3 to
+  not depend on T1. The orchestrator should flag this and ask the user
+  before dispatching level 2.
+
+## References
+
+- `assets/worktree-config.md` — Git worktree + sparse-checkout syntax, blast
+  radius discovery patterns (Python and JS/TS). Load for exact commands.
+- `jovaltus-execution-patterns` — runtime skill with non-obvious execution
+  pitfalls: subagent commit gotcha, no-concurrency-cap dispatch, uv worktree
+  provisioning, subagent timeouts.
