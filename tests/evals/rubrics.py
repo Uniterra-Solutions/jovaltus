@@ -201,7 +201,7 @@ DIM_PIPELINE = RubricDimension(
     scoring_bands=BAND_FOUR_PHASE,
     evidence_hints=[
         "Check agent trace for clarify tool calls (Plan phase).",
-        "Count delegate_task or jovaltus_* tool invocations.",
+        "Count subagent dispatch invocations (delegate_task, background terminal, hermes chat -q).",
         "Check git log for multiple commits with descriptive messages.",
         "Look for test-failure → fix → retest cycles (Verify phase).",
     ],
