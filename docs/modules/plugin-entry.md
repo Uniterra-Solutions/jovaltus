@@ -73,7 +73,7 @@ The plugin is 55 lines of glue code.
 
 ```yaml
 name: jovaltus
-version: 0.14.0
+version: 0.14.1
 description: Jovaltus Agent Mode — automated development pipeline skills and CLI
 author: LaiTszKin
 ```

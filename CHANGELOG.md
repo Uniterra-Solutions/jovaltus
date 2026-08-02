@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.14.1 — 2026-08-02
+
+### Changed
+
+- **Subagent dispatch guidance is now intent-based in `execute`, `simplify`,
+  and `review` skills.** The skills no longer embed concrete tool
+  invocations (`terminal(background=true)`, `process(action='wait')`,
+  `delegate_task`, `hermes chat -q`). They instead direct the orchestrator
+  to dispatch one subagent per task/worktree — locked to its worktree,
+  with brief and verification embedded — leaving the dispatch mechanism to
+  the agent. Isolation, parallelism, and timeout constraints are preserved
+  as intent, not syntax.
+- **Docs and eval rubric updated to match.** `README.md`,
+  `docs/architecture.md`, and `docs/modules/plugin-entry.md` describe
+  dispatch without tool names; the eval rubric's pipeline-adherence hint
+  now counts any subagent dispatch mechanism.
+
 ## v0.14.0 — 2026-08-02
 
 ### Added
