@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.14.2 — 2026-08-03
+
+### Changed
+
+- **`project-documentation` now keeps the root `README.md` in sync.** When
+  generating or updating the `docs/` tree, the skill also updates the project
+  root `README.md` — linking to the docs hub and reflecting the current stack
+  and install/run/test commands. Covered in the goal, acceptance criteria,
+  core principles, generation order (new step 12), incremental-update flow,
+  gotchas, document-type contract, and audit checklist (coverage, links,
+  freshness). The `jovaltus` router's utility reference now describes the
+  README sync too.
+
 ## v0.14.1 — 2026-08-02
 
 ### Changed
