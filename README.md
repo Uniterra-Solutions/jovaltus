@@ -54,11 +54,11 @@ earlier levels' output. Produces manifest + per-task files under
 
 ### Phase 5: `execute` — DAG Dispatch
 
-Creates one isolated sparse-checkout worktree per task, then dispatches
-subagents level by level via `terminal(background=true)`. All tasks at a
-level run simultaneously; each level's branches merge into an integration
-branch so the next level's subagents see real prior output. Failed tasks
-block their dependents. Updates manifest execution status.
+Creates one isolated sparse-checkout worktree per task, then dispatches a
+subagent per task, level by level (each subagent locked to its worktree).
+All tasks at a level run simultaneously; each level's branches merge into
+an integration branch so the next level's subagents see real prior output.
+Failed tasks block their dependents. Updates manifest execution status.
 
 ### Phase 6: `simplify` — Code Simplification
 

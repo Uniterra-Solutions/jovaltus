@@ -9,7 +9,7 @@ all behavior is defined in skill documents.
 ```mermaid
 graph TD
     Orchestrator[Orchestrator Agent] -->|skill_view| Skills[Bundled Skills]
-    Orchestrator -->|terminal bg| Subagent[Subagent Process]
+    Orchestrator -->|dispatch| Subagent[Subagent Process]
     Subagent -->|git commit| Repo[Git Repository]
     Skills -->|guide| Orchestrator
     Subagent -->|read task| Worktree[Git Worktree]
@@ -32,7 +32,7 @@ their guidance to drive the development pipeline.
 ```mermaid
 graph TD
     Orch -->|skill_view| Skills[Bundled Skills 13x]
-    Orch -->|terminal bg| Sub[Subagent]
+    Orch -->|dispatch| Sub[Subagent]
     Sub -->|git| WT[Worktree]
     Fabricium[Fabricium SDK] -->|HermesPlugin| CLI[CLI Commands]
     Fabricium -->|git_utils| Git[Git Ops]
@@ -43,7 +43,7 @@ graph TD
 |-----------|-----------|---------|
 | Bundled Skills | Markdown (SKILL.md) | 13 self-contained skill documents — pipeline phases + utilities |
 | Orchestrator | Hermes agent | Loads skills, spawns subagents, controls pipeline flow |
-| Subagent Process | Hermes `terminal(background=true)` | Isolated execution in worktree; implements, reviews, tests |
+| Subagent Process | Hermes subagent | Isolated execution in worktree; implements, reviews, tests |
 | Fabricium SDK | `fabricium` pkg | `git_utils`, `HermesPlugin` (CLI + skill auto-discovery), `SkillEvalHarness` |
 | CLI Commands | `hermes jovaltus setup\|status\|update` | Profile management + skill installation |
 
@@ -123,7 +123,8 @@ def register(ctx):
 - No tool handlers — no `jovaltus_implement`, `jovaltus_verify`, `jovaltus_simplify`
 - No state machine — no `state.py`, no stage tracking
 - No hooks — no `hooks.py`, no guidance injection
-- No subagent spawning — the orchestrator spawns subagents directly via `terminal(background=true)`
+- No subagent spawning from the plugin — skills direct the orchestrator to
+  dispatch subagents itself (one per task, locked to its worktree)
 
 ## Key Architectural Decisions
 
