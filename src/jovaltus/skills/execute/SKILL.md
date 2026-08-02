@@ -4,8 +4,8 @@ description: >
   Dispatches subagents according to the manifest's task DAG. Reads the DAG
   (nodes = tasks, directed edges = dependencies, levels = topological
   layers), creates one isolated sparse-checkout worktree per task, then runs
-  level-parallel dispatch: all tasks at a level spawn simultaneously via
-  terminal(background=true); levels execute sequentially; each level's
+  level-parallel dispatch: all tasks at a level spawn simultaneously;
+  levels execute sequentially; each level's
   branches merge into an integration branch so the next level's subagents
   see real prior output. Failed tasks block their dependents. Updates
   manifest execution status. Reports pass/fail per task.
@@ -48,8 +48,8 @@ seeded with its TASK.md, config, and relevant project docs.
 ## Acceptance Criteria
 
 - Every manifest task is dispatched, in topological order
-- All tasks at the same level run simultaneously via
-  `terminal(background=true, workdir=<path>)`
+- All tasks at the same level run simultaneously, each subagent isolated
+  to its own worktree
 - Level N worktrees contain Level 1..N-1 output (integration branch) before
   their subagents start
 - Each subagent locked to its worktree — cannot escape to parent
@@ -62,16 +62,14 @@ seeded with its TASK.md, config, and relevant project docs.
 read (or recompute) the levels. Dispatch is level by level: parallel within,
 sequential across. Never dispatch a task before its dependencies pass.
 
-**`hermes chat -q`, not `delegate_task`.** `delegate_task` doesn't support
-per-subagent workdir. `terminal(workdir=<path>, background=true)` isolates
-each subagent to its worktree. Trade-off: losing `delegate_task`'s inline
-summary, but the subagent's final reply serves the same purpose.
+**Dispatch a subagent per task, rooted in its worktree.** Each subagent's
+working directory IS its worktree — it sees only that project and cannot
+escape to the parent repo. Choose whatever dispatch mechanism guarantees
+this isolation (e.g. launch the subagent with the worktree as its working
+directory). The subagent's final reply is its report.
 
-**No concurrency cap within a level.** `terminal(background=true)` has no
-parallel limit. Dispatch ALL tasks at the current level in one batch — don't
-stagger, don't create waves. (The "3-5 concurrent" myth comes from
-`delegate_task`'s `max_concurrent_children` config, which this flow doesn't
-use.)
+**No concurrency cap within a level.** Dispatch ALL tasks at the current
+level in one batch — don't stagger, don't create waves.
 
 **Worktree is the isolation boundary.** The subagent sees only files in its
 worktree. Same-level siblings cannot conflict because file ownership is
@@ -160,29 +158,25 @@ user decide whether to resolve manually or re-decompose.
 
 **Step 2: Dispatch level L tasks**
 
-All tasks at level L spawn simultaneously — no concurrency cap:
+All tasks at level L spawn simultaneously — no concurrency cap. For each
+task, dispatch one subagent rooted in its worktree
+(`.worktrees/<id>-<slug>`). Its brief must say:
 
-```bash
-terminal(
-    command="hermes chat -q 'Read TASK.md. Implement everything specified.
-The worktree contains code from earlier levels (merged via the integration
-branch). Work only in this directory. Run the verification command when
-done.'",
-    workdir=".worktrees/<id>-<slug>",
-    background=true,
-    notify_on_complete=true,
-    timeout=1800
-)
-```
+- Read `TASK.md` and implement everything specified
+- The worktree contains code from earlier levels (merged via the
+  integration branch) — build on real interfaces, not stubs
+- Work only in this directory; never touch the parent repo
+- Run the verification command when done and report the result
 
-Collect session_id per task. Mark level L tasks 🟡 running in manifest.
+Keep a handle per dispatched subagent so you can wait on each one. Mark
+level L tasks 🟡 running in manifest.
 
 ---
 
 **Step 3: Wait + update status**
 
-`process(action='wait', session_id=<id>)` for each task in the level. Check
-exit codes. Update manifest: 🟢 passed or 🔴 failed.
+Wait for every dispatched subagent at this level to finish. Check exit
+codes. Update manifest: 🟢 passed or 🔴 failed.
 
 ---
 
@@ -249,11 +243,12 @@ halt.
 - **Subagents DO see earlier-level code.** After the rebase step (Phase 2
   Step 1), level L ≥ 2 worktrees contain all prior-level output. Subagents
   implement against real interfaces, not stubs.
-- **`terminal(background=true)` returns immediately.** The `session_id` is
-  your handle. Use `process(action='wait', session_id=<id>)` to block.
-- **Timeout.** Default 180s is too short. Set `timeout=1800` (30 min).
-- **Subagent model.** Uses same model as parent. For cost savings, set
-  `HERMES_MODEL` to a cheaper model before dispatch.
+- **Dispatch returns immediately.** Keep the handle returned by each
+  dispatch and block on it before advancing to the next step.
+- **Timeout.** Give each subagent a generous timeout (~30 min); a short
+  default can kill long implementations.
+- **Subagent model.** Uses same model as parent. For cost savings, dispatch
+  with a cheaper model configured.
 - **Stale worktrees.** If the manifest was regenerated, remove old worktrees
   (`git worktree remove --force` + `git worktree prune`) before Phase 1.
 - **Integration branch is temporary.** `agent/integration-{{plan-slug}}`

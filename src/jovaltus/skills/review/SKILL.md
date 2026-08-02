@@ -75,16 +75,15 @@ survives gets merged; worktrees cleaned up after.
 
 **Phase 2 — Calibrate:** Per TASK.md, classify each worktree DEEP / STANDARD / QUICK.
 
-**Phase 3 — Dispatch:** Per worktree simultaneously:
-```bash
-CHECKLIST=$(cat references/review-checklist.md)
-hermes chat -q "You are an ADVERSARIAL CODE REVIEWER. Read TASK.md, then
-try to BREAK the code using the embedded checklist. Depth: <DEPTH>.
---- FULL CHECKLIST ---
-$CHECKLIST
---- END CHECKLIST ---"
-```
-Launch: `background=true`, `notify_on_complete=true`, `timeout=1800`, `workdir=.worktrees/<id>-<slug>`.
+**Phase 3 — Dispatch:** Per worktree simultaneously, dispatch one
+adversarial review subagent rooted in that worktree. Embed the FULL
+checklist (`references/review-checklist.md`) verbatim in its brief —
+subagents cannot read orchestrator files (see Gotchas). The brief must say:
+
+- You are an ADVERSARIAL CODE REVIEWER
+- Read TASK.md, then try to BREAK the code using the embedded checklist
+- Depth: <DEPTH>
+- Stay inside the worktree; report verdict + evidence tests
 
 **Phase 4 — Collect:** Wait all. All ✅ → merge. Any ❌ → report blocked.
 ⚠️ FIXED → re-verify evidence tests.
@@ -119,8 +118,8 @@ Main agent gathers:
 **Phase 2 — Calibrate depth.** One review, one depth — use the highest risk
 signal in the change scope (auth/crypto → DEEP, CRUD → STANDARD, etc.).
 
-**Phase 3 — Dispatch.** ONE subagent via `delegate_task` (preferred) or
-`hermes chat -q`. Embed the 4-layer checklist + all context items.
+**Phase 3 — Dispatch.** ONE subagent. Embed the 4-layer checklist + all
+context items in its brief.
 
 **Phase 4 — Collect verdict.** Review subagent result: apply unreviewed fixes,
 re-verify, escalate ❌ BLOCKED to user.
@@ -205,8 +204,8 @@ REPORT:
 - **CI gaming FIRST.** Before reading code, scan configs for tampering.
 - **Assumption violations are #1 missed bug class.** Enumerate and violate.
 - **Cross-model review catches more.** Different families = different blind spots.
-- **Checklist must be in subagent prompt.** Subagents can't read orchestrator files.
-  Pipe via `cat` or inline verbatim.
+- **Checklist must be in subagent brief.** Subagents can't read orchestrator
+  files. Embed it inline verbatim.
 
 ### Workflow Mode
 
@@ -226,6 +225,6 @@ REPORT:
 ## References
 
 - `references/review-checklist.md` — 4-layer adversarial checklist. Embedded
-  verbatim into Workflow subagent prompts via `cat`.
+  verbatim into Workflow subagent briefs.
 - `references/flat-parallel-merge.md` — Merge resolution + worktree cleanup
   pattern. Used in Workflow Phase 5.

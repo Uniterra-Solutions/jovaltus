@@ -75,16 +75,12 @@ simplifications, runs verification, reports.
 **Phase 1 — Discover:** Find worktrees with `TASK.md` + verification command +
 actual source files. Skip config/doc-only → report SKIPPED.
 
-**Phase 2 — Dispatch:** Per worktree (3-5 concurrent):
-```
-terminal(
-    command="hermes chat -q '<prompt>'",
-    workdir=".worktrees/<id>-<slug>",
-    background=true, notify_on_complete=true, timeout=1800
-)
-```
+**Phase 2 — Dispatch:** Per worktree (3-5 concurrent), dispatch one simplify
+subagent rooted in that worktree. Its brief is the Subagent Brief below,
+plus: read TASK.md, establish the verification baseline, and stay inside
+the worktree.
 
-**Phase 3 — Collect:** `process(action='wait')` per session.
+**Phase 3 — Collect:** Wait for each dispatched subagent; check exit codes.
 - 🟢 SIMPLIFIED: ≥1 SAFE/CAREFUL applied, verify passes
 - 🟡 CLEAN: nothing to simplify
 - 🔴 BLOCKED: verify failed (reverted) or RISKY-only
@@ -148,8 +144,8 @@ Main agent gathers:
 
 **Phase 1 — Prepare context.** Gather the four items above.
 
-**Phase 2 — Dispatch.** ONE subagent via `delegate_task` (preferred) or
-`hermes chat -q`. Provide all four context items in the prompt.
+**Phase 2 — Dispatch.** ONE subagent. Provide all four context items in its
+brief.
 
 **Phase 3 — Apply results.** Review subagent report: apply SAFE changes,
 review CAREFUL one-by-one with verify, flag RISKY for user.
