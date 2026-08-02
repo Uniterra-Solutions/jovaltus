@@ -7,6 +7,13 @@
 
 ---
 
+## Documentation
+
+Full project documentation lives in **[docs/](docs/README.md)** — architecture,
+conventions, project structure, testing, workflows, and setup guides.
+
+---
+
 ## Overview
 
 v0.6.0 rewrote Jovaltus from a stateful pipeline engine into a **skill-driven
@@ -96,7 +103,7 @@ with regression tests; loops until all requirements pass.
 | `qa` | Pipeline | PRD-driven acceptance testing |
 | `agentic-debugging` | Utility | 5-phase evidence-driven debugging |
 | `manage-agents-md` | Utility | AGENTS.md creation, audit, maintenance |
-| `project-documentation` | Utility | Multi-file docs/ tree generation |
+| `project-documentation` | Utility | Multi-file docs/ tree generation + root README sync |
 | `manage-git-repo` | Utility | Commit, release, branch+PR, stacked PR |
 
 ---

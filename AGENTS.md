@@ -66,6 +66,7 @@ parallel.
 
 - `docs/` — Architecture, conventions, project structure, testing, workflows, setup
 - Every doc claim traces to source file + line range. `[INFERRED]` marks unverifiable claims.
+- Docs updates keep root `README.md` in sync — it links to `docs/README.md` and reflects current state
 
 ## Boundaries
 

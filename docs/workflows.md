@@ -77,6 +77,8 @@ git commit --no-verify -m "..."
 1. Edit `src/jovaltus/skills/<name>/SKILL.md`
 2. Restart Hermes to reload skills (or use `skill_view()` which reads from disk)
 3. Test with a small task to verify behavior
+4. Keep root `README.md` and `docs/` in sync if the change alters the skill's
+   description, workflow, or output contracts
 
 ## Creating a Branch + PR from Changes
 

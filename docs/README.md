@@ -56,6 +56,7 @@ execute → simplify → review → qa) plus 4 utility skills.
 - New doc file added? → Add to Document Index + I want to... table
 - Doc file removed? → Remove from both tables
 - Skill renamed? → Update cross-references in all docs linking to it
+- Root `README.md` changed? → Reflect the change here if it affects the project summary or quick links
 
 ## Find It Fast
 
