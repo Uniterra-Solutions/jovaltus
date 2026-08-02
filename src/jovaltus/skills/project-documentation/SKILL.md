@@ -17,6 +17,8 @@ Transform any codebase into a structured `docs/` tree where every fact has
 exactly one home, every diagram matches the code, and every cross-reference
 resolves. Output is agent-first — tables over prose, structural maps over
 narrative. Downstream agents read these docs instead of re-grepping the repo.
+The project root `README.md` stays in sync — it remains the front door,
+linking to `docs/` and reflecting the current project state.
 
 ## Acceptance Criteria
 
@@ -24,6 +26,7 @@ narrative. Downstream agents read these docs instead of re-grepping the repo.
 - Complete `docs/` tree: architecture, modules, API, conventions, data, setup, testing, workflows
 - Mermaid diagrams (C4 context + container minimum) match current code
 - All cross-references resolve; hub README indexes every file
+- Project root `README.md` updated: links to `docs/`, reflects current state
 - Incremental mode (when git available): `git diff` → update only affected docs
 - Verification audit passes: coverage, links, freshness, quality, diagrams
 
@@ -53,6 +56,7 @@ Before starting any phase, check these preconditions:
 3. **Agent-first, not human-first.** Tables, structural maps, imperative voice, ≤5-line entries. No introductions, no fluff, no emojis.
 4. **Incremental when possible.** When docs exist (our format + git available), update only affected sections. Full regeneration is a last resort.
 5. **Diagrams ship with code.** Every Mermaid diagram updates in the same commit as the structural change it reflects.
+6. **README stays in sync.** The root `README.md` is the project's front door; `docs/README.md` is the docs hub. Whenever docs change, update the root README's docs link and any facts it duplicates — never let the two drift.
 
 ## Workflow
 
@@ -107,7 +111,8 @@ Generate files in **strict dependency order** (later files reference earlier one
 | 8 | `setup.md` | tech-stack |
 | 9 | `testing.md` | tech-stack, conventions |
 | 10 | `workflows.md` | modules, conventions |
-| 11 | `README.md` | **everything — must be last** |
+| 11 | `README.md` (docs hub) | **everything — must be last** |
+| 12 | root `README.md` | docs hub, setup, tech-stack |
 
 For each file's output contract, follow `references/document-types.md`.
 For writing conventions, follow `references/writing-style-guide.md`.
@@ -124,6 +129,20 @@ rather than skipping it.
 > **Gotcha:** `docs/README.md` is the hub that indexes every other file.
 > Generating it before the indexed files exist produces broken links.
 > Always generate it LAST.
+
+**Root README (step 12):** After the docs tree is complete, update the project
+root `README.md`. It must:
+- Link to the docs hub: `[Documentation](docs/README.md)`
+- Reflect the current project state: name, one-line description, tech stack
+  highlights, install/run commands, test command — pulled from `setup.md` and
+  `tech-stack.md`
+- Not duplicate deep content (architecture diagrams, module lists) — link into
+  `docs/` instead, keeping "one home per fact"
+
+If no root `README.md` exists, create one. If it exists, update the stale
+sections rather than rewriting wholesale. If the project deliberately uses a
+different entry doc (e.g. `docs/index.html` in a static site), update that
+instead and note it in the audit report.
 
 ### Phase 4: VERIFY — Audit
 
@@ -152,7 +171,11 @@ Run this workflow when `docs/` exists and is our format.
    - Directory restructured → `docs/project-structure.md`
 3. Update ONLY affected sections. Re-read changed source, update doc entries —
    do not touch unrelated sections.
-4. Focused re-audit: links on updated files, freshness on changed modules.
+4. Sync the root `README.md`: if install/run/test commands, tech stack, or
+   project description changed, reflect that in the root README (per Phase 3
+   step 12). Confirm the `docs/` link still resolves.
+5. Focused re-audit: links on updated files, freshness on changed modules,
+   root README vs docs consistency.
 
 **Without git:** fall back to full regeneration with `[UNABLE TO VERIFY — no git]`
 on all freshness checks.
@@ -174,6 +197,10 @@ on all freshness checks.
   Presenting inference as fact is the #1 documentation hallucination.
 - **Generation order is non-negotiable.** `README.md` last. Cross-references break
   if you write the index before the indexed files exist.
+- **Root README ≠ docs hub.** `docs/README.md` indexes the docs tree; the root
+  `README.md` is the project's front door. Both must be updated — a root README
+  that describes an old stack or misses the docs link is a stale-docs failure
+  even if `docs/` itself is perfect.
 - **Never silently mix doc formats.** If `docs/` exists from another generator
   (Sphinx, MkDocs, Docusaurus), don't merge. Offer `docs-agent/` as an alternative
   or ask the user. Merging breaks both formats.
@@ -183,7 +210,7 @@ on all freshness checks.
 
 ## References
 
-- `references/document-types.md` — Output format contract for all 11 document types
+- `references/document-types.md` — Output format contract for all 12 document types (11 docs/ files + root README)
 - `references/tech-stack-detection.md` — Detection matrices for 10 languages, databases, infrastructure
 - `references/writing-style-guide.md` — Agent-first writing rules (10 rules with bad/good examples)
 - `references/audit-checklist.md` — 5-dimension verification protocol with report formats

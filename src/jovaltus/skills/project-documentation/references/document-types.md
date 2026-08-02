@@ -198,6 +198,29 @@ deploying, debugging.
 
 **When to update:** When a workflow changes or a new one needs documenting.
 
+### 12. Root `README.md` — Project Front Door
+
+**Purpose:** The project's public entry point (repo home page, package page).
+It is NOT part of the `docs/` tree, but this skill owns keeping it in sync —
+documentation is incomplete if the root README describes a stale stack or
+doesn't link to the docs.
+
+**Structure:**
+- Project name + one-line description (matches `docs/README.md` summary)
+- Quick start: install, run, test commands (from `docs/setup.md`, `docs/testing.md`)
+- Link to docs hub: `[Documentation](docs/README.md)`
+- Tech stack highlights (from `docs/tech-stack.md`)
+- License / status badges (if present)
+
+**Rules:**
+- Link into `docs/`, don't duplicate deep content (one home per fact)
+- If no root `README.md` exists, create one; if it exists, update stale
+  sections rather than rewriting wholesale
+- If the project deliberately uses a different entry doc (static site
+  `docs/index.html`), update that instead and note it in the audit report
+
+**When to update:** Whenever the docs tree, stack, or run commands change.
+
 ---
 
 ## Document Generation Order
@@ -214,4 +237,5 @@ Files must be generated in this order because later files reference earlier ones
 8. `setup.md` (depends on tech-stack)
 9. `testing.md` (depends on tech-stack, conventions)
 10. `workflows.md` (depends on modules, conventions)
-11. `README.md` (depends on everything — generate LAST)
+11. `docs/README.md` (depends on everything — generate LAST)
+12. Root `README.md` (depends on docs hub, setup, tech-stack — after the docs tree)

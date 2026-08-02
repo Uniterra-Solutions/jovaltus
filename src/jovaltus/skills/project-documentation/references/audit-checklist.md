@@ -25,6 +25,8 @@ a concrete fix suggestion.
   - Verify: check `docker-compose.yml` services, env vars for external URLs
 - [ ] Every non-trivial env var appears in `docs/setup.md`
   - Verify: compare `.env.example` entries vs setup.md env var table
+- [ ] Root `README.md` links to `docs/README.md` and describes the current stack
+  - Verify: README's install/run/test commands match `docs/setup.md`; description matches `docs/README.md`
 
 ### Coverage Report Format
 
@@ -58,6 +60,8 @@ a concrete fix suggestion.
 - [ ] No broken internal anchors (e.g., `[Setup](setup.md#database)` but setup.md has no `#database` heading)
 - [ ] The hub `README.md` index lists every file in `docs/`
   - Verify: `ls docs/` vs entries in README.md index
+- [ ] Root `README.md`'s docs link resolves
+  - Verify: the `[Documentation](docs/README.md)` link target exists
 - [ ] Cross-references between docs are bidirectional where appropriate
   - e.g., module doc links to API reference → API reference links back
 
@@ -93,6 +97,8 @@ Broken links:
   - Verify: run the install + run commands from `setup.md` in a dry-run or check mode
 - [ ] Test commands still work
   - Verify: run the test command from `testing.md`
+- [ ] Root `README.md` doesn't contradict `docs/`
+  - Verify: compare stack/commands/description in root README vs `docs/setup.md`, `docs/tech-stack.md`, `docs/README.md`
 
 ### Freshness Audit Report Format
 

@@ -198,7 +198,7 @@ matches, load the skill directly — no pipeline documents, no phase sequencing.
 |---|---|---|
 | `agentic-debugging` | "這個有 bug" / "fix the crash" / "test is failing" / "不 work" / "行為不對" | Reproduce → Locate → Hypothesize → Fix → Verify. Bounded to 3 loop iterations; Rule of Three escalation for structural bugs. Also applies to unexpected behavior (非預期行為). |
 | `manage-agents-md` | "create AGENTS.md" / "audit project rules" / "update .cursorrules" / "更新項目規範" | Scan project → write 6-section file → self-audit → drift-check every command. Handles AGENTS.md, CLAUDE.md, .cursorrules, .windsurfrules. |
-| `project-documentation` | "generate docs for this project" / "幫我寫文檔" / "document the codebase" | Scan → Analyze (deep-read modules) → Generate 11-file docs/ tree → Verify with audit. Supports incremental git-diff updates. |
+| `project-documentation` | "generate docs for this project" / "幫我寫文檔" / "document the codebase" | Scan → Analyze (deep-read modules) → Generate 11-file docs/ tree → Verify with audit. Syncs root README with the docs. Supports incremental git-diff updates. |
 | `manage-git-repo` | "commit" / "push" / "release" / "bump version" / "tag" / "changelog" / "管理 git repo" | Two independent workflows: Commit (group → order → pre-commit → verify) and Release (determine bump → update versions → changelog → tag → push with confirmation). |
 
 ## Gotchas
