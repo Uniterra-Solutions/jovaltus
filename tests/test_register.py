@@ -116,18 +116,19 @@ def test_register_registers_exactly_three_hooks() -> None:
 def test_register_descriptions_contain_contract_prefixes() -> None:
     ctx = _register()
     by_name = {t["name"]: t for t in ctx.tools}
-    assert by_name["plan"]["description"].startswith(
-        "Start the Jovaltus planning pipeline"
-    )
-    assert by_name["execute"]["description"].startswith(
-        "Execute the task DAG in <plan>"
-    )
-    assert by_name["simplify"]["description"].startswith(
-        "Simplify the changes for <plan>"
-    )
-    assert by_name["review"]["description"].startswith(
-        "Adversarially review the changes for <plan>"
-    )
+    # Each description must state its USE WHEN scenario so the main agent
+    # can route requests to the right tool.
+    assert by_name["plan"]["description"].startswith("USE WHEN:")
+    assert "implementation plan" in by_name["plan"]["description"]
+    assert by_name["execute"]["description"].startswith("USE WHEN:")
+    assert "implement the" in by_name["execute"]["description"]
+    assert by_name["simplify"]["description"].startswith("USE WHEN:")
+    assert "simplified" in by_name["simplify"]["description"]
+    assert by_name["review"]["description"].startswith("USE WHEN:")
+    assert "reviewed" in by_name["review"]["description"]
+    # All four reference the plan artifact / path to keep the chain obvious.
+    for tool in ("plan", "execute", "simplify", "review"):
+        assert by_name[tool]["description"]
 
 
 def test_register_can_be_called_twice() -> None:
