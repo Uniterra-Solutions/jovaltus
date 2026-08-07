@@ -1,23 +1,29 @@
 # Architecture — {{PROJECT_NAME}}
 
+> Reference example: this template models the **Jovaltus v1.0.0 Hermes
+> plugin** — a subagent-driven development framework. When documenting
+> another project, keep the section structure and replace the content with
+> that project's actual architecture.
+
 ## System Context (C4 Level 1)
 
 ```mermaid
 graph TD
-    User[User] -->|HTTP| System[{{PROJECT_NAME}}]
-    System -->|SQL| DB[({{DATABASE_TYPE}})]
-    System -->|Cache| Redis[(Redis)]
-    System -->|{{EXTERNAL_SERVICE_PROTOCOL}}| {{EXTERNAL_SERVICE_NAME}}[{{EXTERNAL_SERVICE_NAME}}]
+    User[User] -->|tool call| Tools[Jovaltus Tools]
+    Tools -->|dispatch| Subagent[Subagent Process]
+    Subagent -->|writes| RunDir[.plan/&lt;date&gt;/&lt;slug&gt;/]
+    Hooks[Hooks] -->|advance| State[State Machine]
+    State -->|persist| StateFile[(~/.hermes/jovaltus_state.json)]
 ```
 
-**Users:** {{USER_TYPES}}
+**Users:** {{USER_TYPES}} — a human + main agent that calls tools and reads hook-injected status.
 
 **External services:**
 | Service | Purpose | Protocol |
 |---------|---------|----------|
-| {{DATABASE_TYPE}} | Primary data store | SQL |
-| Redis | Cache / Queue | Redis protocol |
-| {{EXTERNAL_SERVICE_NAME}} | {{EXTERNAL_SERVICE_PURPOSE}} | {{EXTERNAL_SERVICE_PROTOCOL}} |
+| Hermes Agent Runtime | Host process; calls `register(ctx)` at startup | Python in-process |
+| LLM Provider | Powers main agent + subagent reasoning | HTTP API |
+| Git Repository | Working tree where subagents implement | git CLI |
 
 ---
 
@@ -25,40 +31,43 @@ graph TD
 
 ```mermaid
 graph TD
-    Client[Client] -->|HTTPS| Web[{{WEB_ENTRY}}]
-    Web -->|HTTP| API[{{API_SERVER}}]
-    API -->|SQL| DB[({{DATABASE_TYPE}})]
-    API -->|Cache| Redis[(Redis)]
-    API -->|Queue| Worker[{{WORKER_NAME}}]
-    Worker -->|{{EXTERNAL_SERVICE_PROTOCOL}}| {{EXTERNAL_SERVICE_NAME}}
+    Main[Main Agent] -->|plan / execute / simplify / review| Tools[Tools Layer: tools.py]
+    Tools -->|ctx.dispatch_tool delegate_task| Sub[Subagent Process]
+    Sub -->|subagent_stop hook| Hooks[Hooks Layer: hooks.py]
+    Hooks -->|advance| State[State Machine: state.py]
+    State -->|load_state / save_state| SF[(jovaltus_state.json)]
+    Prompts[Prompts: prompts/*.md] -->|goal text| Sub
+    Skills[Bundled Skills x5] -->|guide| Main
 ```
 
 | Container | Technology | Purpose |
 |-----------|-----------|---------|
-| Web | {{WEB_TECH}} | Serves frontend assets |
-| API | {{API_TECH}} | Business logic, auth, routing |
-| Worker | {{WORKER_TECH}} | Background job processing |
-| DB | {{DATABASE_TYPE}} {{DB_VERSION}} | Persistent data |
-| Redis | Redis {{REDIS_VERSION}} | Cache + job queue |
+| Tools Layer | `tools.py` | 4 tool handlers: `plan`, `execute`, `simplify`, `review` — each dispatches subagents via `ctx.dispatch_tool("delegate_task", ...)` |
+| Hooks Layer | `hooks.py` | `subagent_start` / `subagent_stop` / `pre_llm_call` — associate children with the pipeline and advance the state machine |
+| State Machine | `state.py` | Deterministic phase transitions (`prd → research → acceptance → tasks` for plan; simplify/review verdict loops); JSON persistence for cross-session resume |
+| Prompts | `prompts/*.md` | Subagent goal prompts: `prd`, `research`, `acceptance`, `tasks`, `execute`, `simplify-review`, `simplify-fix`, `review`, `review-fix` |
+| Bundled Skills | Markdown (SKILL.md) | 5 utility skills: `manage-git-repo`, `manage-agents-md`, `project-documentation`, `agentic-debugging`, `qa` |
 
 ---
 
 ## Data Flow
 
-### Request Lifecycle
-1. Client sends HTTPS request to `{{WEB_ENTRY}}`
-2. {{WEB_ENTRY}} proxies API requests to `{{API_SERVER}}`
-3. {{API_SERVER}} authenticates via {{AUTH_METHOD}}
-4. {{API_SERVER}} reads/writes to {{DATABASE_TYPE}} via {{ORM_NAME}}
-5. For long-running tasks, {{API_SERVER}} enqueues job to Redis
-6. {{WORKER_NAME}} picks up job, processes, updates status
+### Tool Dispatch
 
-### Auth Flow
-1. User POSTs credentials to `{{AUTH_ENDPOINT}}`
-2. Server validates against {{AUTH_STORE}}
-3. Server returns {{TOKEN_TYPE}} token
-4. Client includes token in `{{AUTH_HEADER}}` header
-5. {{AUTH_MIDDLEWARE}} validates on each request
+1. Main agent calls a tool (`plan` | `execute` | `simplify` | `review`) with its arguments
+2. Handler validates input, computes the run dir, loads the phase prompt, substitutes `[[tokens]]`
+3. Handler dispatches **one** subagent via `ctx.dispatch_tool("delegate_task", ...)` (fire-and-forget; `role="orchestrator"` only for `execute`)
+4. Handler returns `{"status": "started", "tool": ..., "phase": ..., "run_dir": ...}`
+5. The subagent writes its artifact (e.g. `prd.md`, `tasks.md`, `verdict.json`) into the run dir
+
+### State Machine Flow
+
+1. `subagent_start` matches the child goal marker `[jovaltus-pipeline:<tool>:<phase>]` → `register_child`
+2. `subagent_stop` completes the child → phase advances per the chain table:
+   - `plan`: prd → research → acceptance → tasks → done
+   - `simplify` / `review`: verdict `pass` → done; verdict `fix` → fixer dispatched, then reviewer re-dispatched (no loop cap)
+3. `pre_llm_call` injects a one-line pipeline status into the main agent's user message each turn
+4. Non-success child status → `finish_pipeline(ok=False, error=...)`
 
 ---
 
@@ -66,8 +75,12 @@ graph TD
 
 | Decision | Rationale | Status | Date |
 |----------|-----------|--------|------|
-| {{DECISION_1_TITLE}} | {{DECISION_1_RATIONALE}} | Active | {{DATE}} |
-| {{DECISION_2_TITLE}} | {{DECISION_2_RATIONALE}} [INFERRED] | Active | {{DATE}} |
+| Subagent-driven, not skill-driven | Deterministic flow owned by the state machine; main agent only calls tools and reads status | Active | {{DATE}} |
+| 4 tools: plan / execute / simplify / review | Handlers dispatch subagents; no pipeline logic in the main agent | Active | {{DATE}} |
+| JSON state persistence | Cross-session resume via fabricium `load_state` / `save_state` | Active | {{DATE}} |
+| Hooks wire lifecycle | `subagent_stop` advances the chain; `pre_llm_call` surfaces status | Active | {{DATE}} |
+| No simplify/review loop cap | Review-fix loops run until the reviewer passes | Active | {{DATE}} |
+| Fabricium as sole dependency | `git_utils`, CLI registration, skill bundling | Active | {{DATE}} |
 
 ---
 
@@ -85,15 +98,18 @@ graph LR
 ---
 
 ## How to Update
-- New service or external dependency added? → Add node to System Context diagram
-- Container added/removed? → Update Container View diagram
-- Auth method changed? → Update Auth Flow
+
+- Tool or hook added/removed? → Update Container View table + Tool Dispatch flow
+- Phase chain changed? → Update State Machine Flow chain table
+- Prompt added/removed? → Update Prompts row in Container View
+- Skill added/removed? → Update Bundled Skills row
 - New architectural decision made? → Add row to decisions table
-- Deployment pipeline changed? → Update Deployment section
 
 ## Find It Fast
+
 ```bash
-grep -r "class.*Config" src/          # All configuration classes
-grep -r "router" src/api/            # Route definitions
-grep -r "import.*redis" src/         # Redis usage points
+grep -rn "register_tool" src/          # Tool registration
+grep -rn "register_hook" src/          # Hook registration
+ls src/jovaltus/prompts/               # Subagent goal prompts
+ls src/jovaltus/skills/                # Bundled skills
 ```
