@@ -148,9 +148,13 @@ def register(ctx: Any) -> None:
         plan_handler,
         is_async=False,
         description=(
-            "Start the Jovaltus planning pipeline: PRD → research → "
-            "acceptance → task DAG subagents, each dispatched in sequence "
-            "as an isolated subagent. Requires user_requirements."
+            "USE WHEN: the user has a software-engineering request and wants "
+            "it turned into an implementation plan — or has a complex "
+            "software-engineering request that needs planning. Dispatches "
+            "the Jovaltus planning pipeline in sequence (PRD → research → "
+            "acceptance → task DAG), each phase as an isolated subagent, "
+            "and writes the artifacts into <repo_root>/.plan/<date>/<name>/. "
+            "Requires user_requirements."
         ),
         emoji="📋",
     )
@@ -161,8 +165,12 @@ def register(ctx: Any) -> None:
         execute_handler,
         is_async=False,
         description=(
-            "Execute the task DAG in <plan>: dispatch an orchestrator "
-            "subagent that drives the plan's tasks level by level. Requires "
+            "USE WHEN: a plan exists and you want to implement the "
+            "software-engineering work described in it. Dispatches an "
+            "orchestrator subagent that drives the plan's task DAG level by "
+            "level (parallel within a level, sequential across levels), "
+            "leaving the changes uncommitted in the working tree for "
+            "simplify/review. Requires a plan path; "
             "delegation.max_spawn_depth >= 2 in config.yaml."
         ),
         emoji="⚙️",
@@ -174,9 +182,11 @@ def register(ctx: Any) -> None:
         simplify_handler,
         is_async=False,
         description=(
-            "Simplify the changes for <plan>: dispatch a review subagent, "
-            "then a fixer, looping until the review passes. Requires the "
-            "plan path."
+            "USE WHEN: the plan's implementation exists and you want the "
+            "code it produced simplified. Dispatches a review subagent to "
+            "find simplification opportunities in the uncommitted diff, then "
+            "a fixer, looping until the review passes. Requires the plan "
+            "path."
         ),
         emoji="🧹",
     )
@@ -187,9 +197,11 @@ def register(ctx: Any) -> None:
         review_handler,
         is_async=False,
         description=(
-            "Adversarially review the changes for <plan>: dispatch an "
-            "adversarial review subagent, then a fixer, looping until the "
-            "review passes. Requires the plan path."
+            "USE WHEN: the plan's implementation exists and you want the "
+            "code it produced reviewed. Dispatches an adversarial review "
+            "subagent to hunt for bugs, security holes, and contract "
+            "violations in the uncommitted diff, then a fixer, looping until "
+            "the review passes. Requires the plan path."
         ),
         emoji="🛡️",
     )
