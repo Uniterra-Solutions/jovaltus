@@ -44,12 +44,24 @@ plugin = HermesPlugin(
 
 
 def register(ctx: Any) -> None:
-    """Register CLI commands and bundled skills.
+    """Register CLI commands, bundled skills, pipeline tools, and hooks.
 
     Fabricium's ``plugin.register(ctx)`` handles:
     - CLI: ``hermes jovaltus setup|status|update|update --check``
     - Bundled skills from ``skills/``
+    ``tools.register(ctx)`` then registers the four pipeline tools (plan /
+    execute / simplify / review) and the three hook callbacks (subagent_start
+    / subagent_stop / pre_llm_call) per Contract §6.
     """
     plugin.register(ctx)
+
+    from jovaltus import hooks as jovaltus_hooks
+    from jovaltus import tools as jovaltus_tools
+
+    jovaltus_tools.register(ctx)
+    jovaltus_hooks.init(ctx)
+    ctx.register_hook("subagent_start", jovaltus_hooks.on_subagent_start)
+    ctx.register_hook("subagent_stop", jovaltus_hooks.on_subagent_stop)
+    ctx.register_hook("pre_llm_call", jovaltus_hooks.on_pre_llm_call)
 
     logger.info("Jovaltus registered (via Fabricium)")
