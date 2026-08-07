@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v1.1.1 — 2026-08-07
+
+### Changed
+- Tool descriptions now state their USE WHEN scenario so the main agent can
+  route requests correctly: `plan` for turning a software-engineering
+  request into an implementation plan, `execute` for implementing an
+  existing plan, `simplify` for simplifying the plan's implementation,
+  `review` for reviewing the plan's implementation.
+
 ## v1.1.0 — 2026-08-07
 
 ### Added
