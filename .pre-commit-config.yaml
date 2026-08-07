@@ -25,10 +25,16 @@ repos:
       # ── Stage 2: Type check (must pass) ──────────────────────────
       - id: mypy
         name: mypy strict check
-        args: [--strict, --no-site-packages]
+        args: [--strict]
         exclude: ^tests/
         types_or: [python, pyi]
-        additional_dependencies: []
+        # fabricium is typed (py.typed) and the plugin subclasses its
+        # HermesPlugin for setup/update auto-configuration — install it into
+        # the hook env so mypy can type-check that subclass. Without
+        # --no-site-packages the hook env is isolated (fabricium only), and
+        # the pyproject overrides still suppress the Hermes-internal
+        # agent.*/gateway.*/tools.* lazy imports.
+        additional_dependencies: ["fabricium>=0.1.1"]
         description: "mypy --strict — type checking (commit blocked on failure)"
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
