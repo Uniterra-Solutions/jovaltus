@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v1.1.0 — 2026-08-07
+
+### Added
+- All 9 pipeline subagents read the repository before producing their
+  artifact: each prompt gains a `[[repo_root]]` input and a Step-0
+  instruction to explore AGENTS.md, the project manifest, source layout,
+  and tests — PRD/design/acceptance/tasks are grounded in real code,
+  reviewers judge diffs in context.
+
+### Changed
+- Subagents now inherit the main agent's toolset: `SubagentLaunchRequest`
+  leaves `allowed_toolsets` unset so Hermes child construction copies the
+  parent's enabled toolsets (delegate_tool.py:1392-1395) instead of a
+  fixed terminal/file/web list.
+
 ## v1.0.1 — 2026-08-07
 
 ### Fixed
