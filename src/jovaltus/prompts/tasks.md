@@ -28,7 +28,8 @@ drives worker subagents level by level.
 2. Decompose the work into discrete, independently executable tasks. Every
    PRD functional requirement and every acceptance criterion must trace to at
    least one task.
-3. Express the DAG in THREE forms (see below), each with a mermaid graph.
+3. Choose the SINGLE execution form that best fits the dependency structure
+   (see below) and document it with its mermaid graph.
 4. **Write** the manifest to `[[run_dir]]/tasks.md` (Markdown).
 
 ## Task manifest format
@@ -50,15 +51,24 @@ Each task uses this exact schema (YAML block):
 - `level` — topological level: `1 + max(level of deps)`; tasks with no deps
   are level 1.
 
-## Three forms (all inside `tasks.md`)
+## One execution form (inside `tasks.md`)
 
-1. **Serial** — a linear, ordered list of tasks (fully sequential chain).
-2. **Batch** — serial batches; tasks within a batch are independent and run
-   in parallel, batches run sequentially.
-3. **Fully parallel** — all tasks at level 1 with zero edges (only when the
-   project genuinely allows it).
+Choose exactly ONE form based on the dependency structure, and document only
+that one with its mermaid DAG:
 
-Each form MUST include its mermaid DAG, e.g.:
+1. **Batch** (default) — serial batches; tasks within a batch are independent
+   and run in parallel, batches run sequentially. Use this whenever the DAG
+   has any level > 1. This is the form the execute orchestrator drives
+   (workers run per level).
+2. **Serial** — a linear, ordered list of tasks (fully sequential chain).
+   Use ONLY when every task depends on the previous one (no parallelism at
+   all).
+3. **Fully parallel** — all tasks at level 1 with zero edges. Use ONLY when
+   the project genuinely allows every task to run at once.
+
+Do NOT list multiple forms. Pick the one that matches the DAG (batch unless
+the DAG degenerates to a chain or a flat level-1 set), then include its
+mermaid graph, e.g.:
 
 ```mermaid
 graph TD

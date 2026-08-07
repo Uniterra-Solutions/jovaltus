@@ -312,3 +312,21 @@ def test_execute_prompt_forbids_commits() -> None:
     assert "do not commit" in lowered
     assert "agents.md" in lowered
     assert "parallel" in lowered
+
+
+def test_tasks_prompt_requires_one_execution_form() -> None:
+    """tasks.md must pick ONE execution form, not write all three.
+
+    Regression (2026-08-07): the tasks subagent emitted serial + batch +
+    fully-parallel sections in tasks.md. The execute orchestrator drives the
+    DAG level-by-level, so the manifest should choose the single matching
+    form (batch by default) and document only that one.
+    """
+    text = load_prompt("tasks")
+    lowered = text.lower()
+    assert "three forms" not in lowered
+    assert "choose exactly one" in lowered
+    assert "do not list multiple forms" in lowered
+    assert "batch" in lowered
+    assert "serial" in lowered
+    assert "mermaid" in lowered
