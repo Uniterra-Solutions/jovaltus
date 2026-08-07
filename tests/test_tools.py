@@ -430,3 +430,41 @@ def test_handler_signatures_accept_args_only() -> None:
         tools.review_handler,
     ):
         assert callable(handler)
+
+
+# ── completion-notification routing capture -----------------------------------
+
+
+def test_capture_routing_snapshots_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A main-turn dispatch captures the originating session for notifications."""
+
+    class FakeParent:
+        session_id = "sess-abc"
+
+    monkeypatch.setattr(tools, "_live_parent", lambda: FakeParent())
+    monkeypatch.setenv("HERMES_UI_SESSION_ID", "ui-9")
+    routing: dict[str, str] = {"session_key": "", "origin_ui_session_id": ""}
+    monkeypatch.setattr(tools, "_ROUTING", routing)
+
+    tools._capture_routing()
+
+    assert routing == {"session_key": "sess-abc", "origin_ui_session_id": "ui-9"}
+
+
+def test_capture_routing_skips_daemon_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Off-turn (hook) dispatches must not overwrite the main-turn snapshot.
+
+    Hook callbacks run on child daemon threads where the contextvar parent is
+    not visible; if they clobbered _ROUTING with empty values the completion
+    notification would lose its routing and fail closed.
+    """
+    monkeypatch.setattr(tools, "_live_parent", lambda: None)
+    routing: dict[str, str] = {
+        "session_key": "sess-keep",
+        "origin_ui_session_id": "ui-keep",
+    }
+    monkeypatch.setattr(tools, "_ROUTING", routing)
+
+    tools._capture_routing()
+
+    assert routing == {"session_key": "sess-keep", "origin_ui_session_id": "ui-keep"}

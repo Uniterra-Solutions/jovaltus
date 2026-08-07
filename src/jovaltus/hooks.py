@@ -83,7 +83,7 @@ def on_subagent_stop(**kwargs: Any) -> None:
         if not jstate.complete_child(p, str(child_session_id), status, summary):
             return  # not our active child (e.g. orchestrator grandchildren)
         if status not in _SUCCESS_STATUSES:
-            jstate.finish_pipeline(p, False, error=summary)
+            _finish_failed(p, error=summary)
             return
         _advance(p)
     except Exception:  # noqa: BLE001 — a bad hook must not break the loop
@@ -114,9 +114,8 @@ def _advance(p: jstate.PipelineState) -> None:
     if p.tool in ("simplify", "review") and p.phase in _REVIEWER_PHASES:
         verdict = _read_verdict(p)
         if verdict is None:
-            jstate.finish_pipeline(
+            _finish_failed(
                 p,
-                False,
                 error=f"verdict.json missing or invalid in {p.run_dir}",
             )
             return
@@ -140,13 +139,64 @@ def _advance(p: jstate.PipelineState) -> None:
             or f"dispatch failed for phase {next_phase} (status={result.get('status')!r})"
         )
         logger.error("Jovaltus dispatch failed at %s: %s", next_phase, message)
-        jstate.finish_pipeline(p, False, error=message)
+        _finish_failed(p, error=message)
 
 
 def _finish_done(p: jstate.PipelineState) -> None:
     """Terminal transition: phase ``"done"`` + status ``"done"``."""
     jstate.set_phase(p, "done")
     jstate.finish_pipeline(p, True)
+    _push_completion_event(p, True)
+
+
+def _finish_failed(p: jstate.PipelineState, error: str) -> None:
+    """Terminal transition: status ``"failed"`` with *error*."""
+    jstate.finish_pipeline(p, False, error=error)
+    _push_completion_event(p, False)
+
+
+def _build_completion_event(
+    p: jstate.PipelineState, ok: bool, routing: dict[str, str]
+) -> dict[str, Any]:
+    """Completion event for the process_registry completion_queue.
+
+    The queue is polled by the desktop/TUI, CLI, and gateway surfaces while
+    the agent is idle; each drains a completion into a status update + a new
+    agent turn, so the main agent learns the pipeline finished without
+    waiting for the user's next message.
+    """
+    evt: dict[str, Any] = {
+        "type": "completion",
+        "session_id": f"jovaltus-{p.tool}-{Path(p.run_dir).name}",
+        "command": f"jovaltus {p.tool}",
+        "exit_code": 0 if ok else 1,
+        "completion_reason": "completed" if ok else "failed",
+        "output": jstate.status_text(p),
+    }
+    if routing.get("session_key"):
+        evt["session_key"] = routing["session_key"]
+    if routing.get("origin_ui_session_id"):
+        evt["origin_ui_session_id"] = routing["origin_ui_session_id"]
+    return evt
+
+
+def _push_completion_event(p: jstate.PipelineState, ok: bool) -> None:
+    """Notify the host surface that the pipeline reached a terminal state.
+
+    Best-effort: without the Hermes runtime (unit tests / CI) or when the
+    queue is unavailable, the notification is skipped — the state machine
+    and pre_llm_call status injection still carry the pipeline state.
+    """
+    try:
+        from tools.process_registry import process_registry
+    except Exception:  # noqa: BLE001 — no Hermes runtime (CI)
+        return
+    try:
+        from jovaltus.tools import _ROUTING
+
+        process_registry.completion_queue.put(_build_completion_event(p, ok, _ROUTING))
+    except Exception:  # noqa: BLE001 — a bad notification must not break the loop
+        logger.debug("Jovaltus completion notification failed", exc_info=True)
 
 
 def _read_verdict(p: jstate.PipelineState) -> str | None:

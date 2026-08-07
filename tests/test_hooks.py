@@ -439,3 +439,94 @@ def test_hooks_are_resilient_to_state_errors(
     assert hooks.on_pre_llm_call() is None
     hooks.on_subagent_start(child_session_id="c1", child_goal="whatever")
     hooks.on_subagent_stop(child_session_id="c1", child_status="success")
+
+
+# ── completion notification (process_registry completion_queue) ---------------
+
+
+def test_build_completion_event_done_shape(fake_ctx: FakeCtx, fake_home: Path) -> None:
+    """A successful terminal state builds a completion event with routing."""
+    jstate.start_pipeline("plan", "/abs/run", user_requirements="req")
+    p = jstate.get_pipeline()
+    assert p is not None
+    evt = hooks._build_completion_event(
+        p, True, {"session_key": "sess-1", "origin_ui_session_id": "ui-9"}
+    )
+    assert evt["type"] == "completion"
+    assert evt["session_id"] == "jovaltus-plan-run"
+    assert evt["command"] == "jovaltus plan"
+    assert evt["exit_code"] == 0
+    assert evt["completion_reason"] == "completed"
+    assert "plan" in evt["output"]
+    assert evt["session_key"] == "sess-1"
+    assert evt["origin_ui_session_id"] == "ui-9"
+
+
+def test_build_completion_event_failed_shape(
+    fake_ctx: FakeCtx, fake_home: Path
+) -> None:
+    """A failed terminal state builds a failure event; empty routing omitted."""
+    jstate.start_pipeline("execute", "/abs/run", plan_path="/abs/run/tasks.md")
+    p = jstate.get_pipeline()
+    assert p is not None
+    evt = hooks._build_completion_event(p, False, {})
+    assert evt["type"] == "completion"
+    assert evt["command"] == "jovaltus execute"
+    assert evt["exit_code"] == 1
+    assert evt["completion_reason"] == "failed"
+    assert "session_key" not in evt
+    assert "origin_ui_session_id" not in evt
+
+
+def test_pipeline_done_pushes_completion_event(
+    fake_ctx: FakeCtx, fake_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Completing the plan chain notifies the host surface once, ok=True."""
+    pushed: list[tuple[Any, bool]] = []
+    monkeypatch.setattr(
+        hooks, "_push_completion_event", lambda p, ok: pushed.append((p, ok))
+    )
+    jstate.start_pipeline("plan", "/tmp/run", user_requirements="req")
+
+    for _ in range(4):  # prd → research → acceptance → tasks
+        _run_child()
+
+    assert len(pushed) == 1
+    assert pushed[0][1] is True
+    p = jstate.get_pipeline()
+    assert p is not None and p.status == "done"
+
+
+def test_pipeline_failure_pushes_completion_event(
+    fake_ctx: FakeCtx, fake_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed child notifies the host surface with ok=False."""
+    pushed: list[tuple[Any, bool]] = []
+    monkeypatch.setattr(
+        hooks, "_push_completion_event", lambda p, ok: pushed.append((p, ok))
+    )
+    jstate.start_pipeline("plan", "/tmp/run", user_requirements="req")
+
+    _run_child(status="failed", summary="child blew up")
+
+    assert len(pushed) == 1
+    assert pushed[0][1] is False
+    p = jstate.get_pipeline()
+    assert p is not None and p.status == "failed"
+
+
+def test_non_terminal_transitions_do_not_notify(
+    fake_ctx: FakeCtx, fake_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mid-chain advances (running → running) must not push a notification."""
+    pushed: list[tuple[Any, bool]] = []
+    monkeypatch.setattr(
+        hooks, "_push_completion_event", lambda p, ok: pushed.append((p, ok))
+    )
+    jstate.start_pipeline("plan", "/tmp/run", user_requirements="req")
+
+    _run_child()  # prd → research (still running)
+
+    assert pushed == []
+    p = jstate.get_pipeline()
+    assert p is not None and p.status == "running"

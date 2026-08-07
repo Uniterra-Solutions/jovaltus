@@ -46,6 +46,14 @@ ignore_missing_imports = true
 module = "agent.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "gateway.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tools.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]

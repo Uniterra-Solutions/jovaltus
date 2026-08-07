@@ -39,6 +39,13 @@ _CTX: Any = None
 _PARENT_AGENT: Any = None
 _LIFECYCLE: Any = None
 
+# Routing metadata for completion notifications: snapshotted on the first
+# main-turn dispatch (where the contextvar parent and session env are bound)
+# so hook-driven notifications — which fire on child daemon threads where
+# those contextvars are NOT visible — still land in the session that started
+# the pipeline. Mirrors the process_registry completion-event contract.
+_ROUTING: dict[str, str] = {"session_key": "", "origin_ui_session_id": ""}
+
 
 def _get_parent_agent() -> Any:
     """Return the host parent, preferring the live contextvar, else cached."""
@@ -52,6 +59,39 @@ def _get_parent_agent() -> Any:
     except Exception:  # noqa: BLE001 — fall back to cache
         pass
     return _PARENT_AGENT
+
+
+def _live_parent() -> Any:
+    """The contextvar-bound parent of THIS execution context, or None.
+
+    Present only inside a main-agent turn. Hook dispatches run on child
+    daemon threads where the contextvar is not visible, so callers use this
+    to distinguish "capture routing now" from "keep the existing snapshot".
+    """
+    try:
+        from agent.subagent_lifecycle import get_active_subagent_parent
+
+        return get_active_subagent_parent()
+    except Exception:  # noqa: BLE001 — no Hermes runtime (CI)
+        return None
+
+
+def _capture_routing() -> None:
+    """Snapshot the originating session's routing metadata (main turn only)."""
+    parent = _live_parent()
+    if parent is None:
+        return
+    session_id = getattr(parent, "session_id", None)
+    if session_id:
+        _ROUTING["session_key"] = str(session_id)
+    try:
+        from gateway.session_context import get_session_env
+
+        ui_session = get_session_env("HERMES_UI_SESSION_ID", "")
+    except Exception:  # noqa: BLE001 — CI / non-gateway fallback
+        ui_session = os.environ.get("HERMES_UI_SESSION_ID", "")
+    if ui_session:
+        _ROUTING["origin_ui_session_id"] = str(ui_session)
 
 
 def _get_lifecycle() -> Any:
@@ -394,6 +434,9 @@ def review_handler(args: dict[str, Any], **kwargs: Any) -> str:
 
 def _dispatch_first(p: jstate.PipelineState, tool: str, first_phase: str) -> str:
     """Dispatch the first phase and return the §1 started/error JSON."""
+    # Handlers run on the main turn — snapshot routing before any child
+    # launches so completion notifications target the originating session.
+    _capture_routing()
     try:
         result = dispatch_pipeline_step(p, first_phase)
     except Exception as exc:  # noqa: BLE001 — surface any dispatch failure
