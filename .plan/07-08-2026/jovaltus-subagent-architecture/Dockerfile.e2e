@@ -1,0 +1,16 @@
+# Jovaltus v1.0.0 E2E derived image — base Hermes + fabricium + jovaltus plugin
+FROM nousresearch/hermes-agent:latest
+
+# Base image pins uv exclude-newer to its build date; relax so fresh PyPI
+# releases (fabricium) resolve.
+ENV UV_EXCLUDE_NEWER=2099-01-01
+
+# Build-time installs run as root → the immutable /opt/hermes tree is writable here.
+RUN uv pip install --python /opt/hermes/.venv/bin/python fabricium
+
+# Install the jovaltus plugin (pip entry point hermes_agent.plugins).
+COPY . /src/jovaltus
+# The hermes shim drops to UID 10000; COPY preserves host owner-only perms
+# (600/700) which root-owned files keep — make the tree readable by hermes.
+RUN chown -R hermes:hermes /src/jovaltus
+RUN uv pip install --python /opt/hermes/.venv/bin/python -e /src/jovaltus
