@@ -110,7 +110,15 @@ def register(ctx):
   associate the child with the pipeline (`hooks.py:163-175`)
 - Prompt substitution is **`str.replace` on `[[token]]`** — never
   `.format()` (prompt bodies contain mermaid `{}` braces;
-  `src/jovaltus/tools.py:172-182`)
+  `src/jovaltus/tools.py:253-263`). Tokens: `[[run_dir]]`, `[[repo_root]]`,
+  `[[user_requirements]]` (prd), `[[plan_path]]` (execute/simplify/review)
+- **Every prompt starts with Step 0: read the repository** at
+  `[[repo_root]]` (AGENTS.md, manifest, source layout, tests) so the
+  child's artifact is grounded in real code
+- **Subagents inherit the main agent's toolset**: never pass
+  `allowed_toolsets` to `SubagentLaunchRequest` (None → Hermes inherits the
+  parent's enabled toolsets, `delegate_tool.py:1392-1395`); an explicit
+  list would restrict the subagent
 
 ## Skill Conventions
 

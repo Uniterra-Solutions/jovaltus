@@ -32,7 +32,9 @@ plan → execute → simplify → review
 
 The main agent does NOT decide pipeline flow — it calls tools and reads
 status. Every phase is one isolated subagent whose goal comes from
-`src/jovaltus/prompts/*.md`.
+`src/jovaltus/prompts/*.md`. Each subagent reads the repository first
+(AGENTS.md, manifest, source layout, tests) and inherits the main agent's
+toolset, so planning, design, and review are grounded in the real codebase.
 
 ---
 

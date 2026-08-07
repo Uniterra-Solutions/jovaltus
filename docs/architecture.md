@@ -163,9 +163,25 @@ input (e.g. missing `plan` path, nonexistent plan file).
 | `simplify` | `simplify_handler` (`tools.py:251-262`) | `plan` (required, must exist) | Starts pipeline phase `simplify` (reviewer) |
 | `review` | `review_handler` (`tools.py:265-274`) | `plan` (required, must exist) | Starts pipeline phase `review` (reviewer) |
 
-The repo root is passed to children inside the `context` text
+The repo root is passed to children twice: as a `[[repo_root]]` token in
+every prompt (`tools.py:253-263`, substituted with the main agent's working
+dir from `TERMINAL_CWD`), and inside the `context` text
 (`tools.py:185-192`) — never as a tool parameter (the `delegate_task`
 handler ignores `workspace_path`/`max_spawn_depth`).
+
+Every subagent reads the repository first. Each prompt's Step 0 instructs
+the child to explore `[[repo_root]]` — `AGENTS.md`/`CLAUDE.md`, the project
+manifest, source layout, and tests — before producing its artifact, so
+PRD/design/acceptance/tasks are grounded in real code and reviewers judge
+diffs in context. Greenfield repos (no relevant code) are handled
+explicitly in each prompt.
+
+**Subagents share the main agent's toolset.** `SubagentLaunchRequest`
+leaves `allowed_toolsets` unset (`tools.py:244-252`), so Hermes child
+construction inherits the parent's enabled toolsets
+(`delegate_tool.py:1392-1395`) instead of restricting children to a fixed
+list — the same file/terminal/web tools that let the main agent read the
+repo are available to every pipeline subagent.
 
 ## Subagent Prompts (`prompts/`)
 
@@ -186,8 +202,10 @@ goal document for one phase's subagent:
 | `review.md` | review | `verdict.json` (adversarial review findings) |
 | `review-fix.md` | review_fix | none — fixes defects found by review |
 
-Token substitution is `str.replace` on `[[token]]` (`tools.py:172-182`) —
-never `.format()`, because prompt bodies contain mermaid `{}` braces. Every
+Token substitution is `str.replace` on `[[token]]` (`tools.py:253-263`) —
+never `.format()`, because prompt bodies contain mermaid `{}` braces. Tokens
+are `[[run_dir]]`, `[[repo_root]]`, `[[user_requirements]]` (prd only), and
+`[[plan_path]]` (execute/simplify/review phases). Every
 prompt also carries the literal marker `[jovaltus-pipeline:TOOL:PHASE]`
 which the dispatcher replaces with the real
 `[jovaltus-pipeline:<tool>:<phase>]` marker used by `subagent_start`
