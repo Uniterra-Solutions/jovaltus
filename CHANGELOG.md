@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v1.1.2 — 2026-08-07
+
+### Fixed
+- **Plan artifacts now land in `<session-cwd>/.plan/...`, not `~/.plan`.**
+  `_repo_root()` prefers `agent.runtime_cwd.resolve_agent_cwd()` (the
+  per-session cwd the desktop pins around every turn), falling back to
+  `TERMINAL_CWD` then the process cwd. Previously desktop sessions rooted
+  runs at the gateway launch dir (often `~`).
+- **The main agent is notified when a pipeline completes.** On a terminal
+  state (done or failed), `subagent_stop` pushes a completion event onto
+  `process_registry.completion_queue` — the same rail background terminal
+  tasks use — so the desktop/CLI/gateway surfaces wake the main agent with
+  a "pipeline complete" turn instead of waiting for the user's next
+  message. Routing metadata is captured on the first main-turn dispatch.
+
+### Added
+- **`hermes jovaltus setup` and `update` auto-configure
+  `delegation.max_spawn_depth >= 2`** for installed profiles
+  (`setup_config.py`), so `execute` works out of the box. The text-based
+  YAML edit preserves every other config key (no yaml dependency).
+
+### Changed
+- **`tasks.md` now selects ONE execution form** (batch by default; serial /
+  fully-parallel only when the DAG degenerates) instead of writing all
+  three serial / batch / fully-parallel sections with duplicate mermaid
+  graphs.
+
 ## v1.1.1 — 2026-08-07
 
 ### Changed
