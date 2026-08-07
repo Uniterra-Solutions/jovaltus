@@ -1,7 +1,7 @@
 [project]
 name = "jovaltus"
-version = "0.14.2"
-description = "Jovaltus Agent Mode — Hermes plugin for automated development pipeline"
+version = "1.0.0"
+description = "Jovaltus Agent Mode — Hermes plugin: subagent-driven development framework (plan / execute / simplify / review)"
 requires-python = ">=3.10"
 dependencies = [
     "fabricium>=0.1.1",
@@ -40,6 +40,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "fabricium"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "agent.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

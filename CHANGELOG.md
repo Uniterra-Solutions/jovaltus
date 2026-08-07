@@ -7,6 +7,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v1.0.0 — 2026-08-07
+
+### Architecture Rewrite
+
+Jovaltus is rearchitected from a **skill-driven pipeline** (13 bundled
+skills guiding the orchestrator through each phase) into a
+**subagent-driven deterministic framework**: 4 plugin tools dispatch
+isolated pipeline subagents, a plugin-owned state machine drives phase
+transitions deterministically, and 3 hooks wire subagent lifecycle to the
+state machine and inject pipeline status into the main agent's context
+every turn.
+
+### Added
+
+- **4 pipeline tools** — `plan` (requires `user_requirements`) and
+  `execute` / `simplify` / `review` (each requires `plan`), registered via
+  `ctx.register_tool` with `toolset="jovaltus"`, `is_async=False`
+  (`src/jovaltus/tools.py`). Handlers return
+  `{"status":"started"|"error", ...}` JSON and dispatch the first phase
+  via `ctx.dispatch_tool("delegate_task", ...)`.
+- **Deterministic state machine** — `src/jovaltus/state.py`:
+  `PipelineState` dataclass, `PHASES`/`STATUSES`, and
+  `get_pipeline`/`start_pipeline`/`set_phase`/`register_child`/
+  `complete_child`/`set_verdict`/`finish_pipeline`/`status_text`/
+  `reset_pipeline`. Persisted to `~/.hermes/jovaltus_state.json` under the
+  `"pipeline"` key via `fabricium.state` — cross-session resume; the
+  fabricium-owned `"profiles"` key is never touched.
+- **3 hooks** — `subagent_start` (associates children via the
+  `[jovaltus-pipeline:<tool>:<phase>]` goal marker), `subagent_stop`
+  (advances the chain; simplify/review read `verdict.json` for
+  pass/fix loops with no iteration cap), `pre_llm_call` (injects
+  `[Jovaltus pipeline] ...` status each turn) — `src/jovaltus/hooks.py`.
+- **Subagent prompt library** — `src/jovaltus/prompts/`: 9 Markdown goal
+  documents (prd, research, acceptance, tasks, execute, simplify-review,
+  simplify-fix, review, review-fix) with `[[token]]` substitution via
+  `str.replace` (never `.format()` — prompt bodies contain mermaid braces).
+- **Phase chains** — plan: prd → research → acceptance → tasks → done;
+  execute: execute → done; simplify/review: verdict-driven fixer loops.
+- **Unit test suites** — `tests/test_state.py` (24), `tests/test_tools.py`
+  (18), `tests/test_hooks.py` (17), `tests/test_register.py` (5).
+- **Version bump** — `0.14.2` → `1.0.0` (breaking-change semver; a
+  `v0.7.x` bump would have downgraded below the current release).
+
+### Changed
+
+- **Bundled skills: 13 → 5.** Deleted the 8 pipeline skill directories
+  (`jovaltus`, `discuss`, `design`, `to-spec`, `to-tasks`, `execute`,
+  `simplify`, `review`); kept the 4 utility skills (`agentic-debugging`,
+  `manage-agents-md`, `manage-git-repo`, `project-documentation`) and
+  `qa`.
+- **`qa` skill rewritten** as standalone PRD-driven acceptance testing
+  (no longer a pipeline phase).
+- **`project-documentation` architecture template updated** to describe
+  the subagent-driven framework (4 tools + state machine + hooks).
+- **Docs updated** — `docs/architecture.md`, `docs/project-structure.md`,
+  `docs/workflows.md`, `docs/conventions.md`, `docs/testing.md`,
+  `docs/tech-stack.md`, `docs/README.md`, `docs/modules/plugin-entry.md`,
+  root `README.md`, and `AGENTS.md` now describe the tool-driven
+  framework, 5-skill bundle, and 99-test baseline.
+- **`pyproject.toml` / `plugin.yaml`** — version `1.0.0`, descriptions
+  updated.
+
+### Removed
+
+- **`tests/evals/`** (conftest.py, tasks.py, rubrics.py,
+  test_jovaltus_skills.py — 4 tests). The `SkillEvalHarness` suite
+  measured skill lift for the deleted pipeline; its role as the
+  behavioral gate is superseded by the Phase 7 Docker E2E verification
+  (`docker exec <container> hermes chat -q "<prompt>"`).
+
 ## v0.14.2 — 2026-08-03
 
 ### Changed

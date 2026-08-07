@@ -1,4 +1,4 @@
 name: jovaltus
-version: 0.14.2
-description: Jovaltus Agent Mode — automated development pipeline skills and CLI
+version: 1.0.0
+description: "Jovaltus Agent Mode — subagent-driven development framework: plan / execute / simplify / review tools, state machine, and hooks"
 author: LaiTszKin
