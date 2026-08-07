@@ -32,11 +32,51 @@ _ensure_fabricium()
 
 from fabricium import HermesPlugin  # noqa: E402
 
+# Relative import: Hermes loads directory plugins as ``hermes_plugins.jovaltus``
+# (importlib spec with the plugin dir as __path__), where the top-level
+# ``jovaltus`` name is NOT importable — absolute self-imports fail there.
+from .setup_config import ensure_max_spawn_depth  # noqa: E402
+
 logger = logging.getLogger(__name__)
 
 _PLUGIN_DIR = Path(__file__).parent
 
-plugin = HermesPlugin(
+
+# The execute pipeline's orchestrator subagent spawns worker subagents, so it
+# needs delegation.max_spawn_depth >= 2. Subclassing HermesPlugin lets setup
+# and update auto-configure the profile config instead of leaving the user to
+# hit an execute error ("execute requires delegation.max_spawn_depth >= 2").
+class _JovaltusPlugin(HermesPlugin):
+    def _configure_max_spawn_depth_for_profiles(self) -> None:
+        """Ensure every installed profile's config meets the execute floor."""
+        profiles = set(self._load_state().get("profiles", {}))
+        if self.default_profile:
+            profiles.add(self.default_profile)
+        for profile_name in sorted(profiles):
+            profile_dir = self._get_profile_dir(profile_name)
+            if not profile_dir.exists() or not (profile_dir / "config.yaml").exists():
+                continue
+            if ensure_max_spawn_depth(profile_dir):
+                print(
+                    f"  ⚙️  delegation.max_spawn_depth ensured in profile "
+                    f"'{profile_name}'"
+                )
+            else:
+                print(
+                    f"  ! could not configure delegation.max_spawn_depth for "
+                    f"profile '{profile_name}'"
+                )
+
+    def _setup_command(self, args: Any) -> None:
+        super()._setup_command(args)
+        self._configure_max_spawn_depth_for_profiles()
+
+    def _update_pull(self, args: Any) -> None:
+        super()._update_pull(args)
+        self._configure_max_spawn_depth_for_profiles()
+
+
+plugin = _JovaltusPlugin(
     name="jovaltus",
     plugin_dir=_PLUGIN_DIR,
     default_profile="jovaltus-agent",
