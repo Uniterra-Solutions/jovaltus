@@ -219,18 +219,11 @@ def dispatch_pipeline_step(p: jstate.PipelineState, phase: str) -> dict[str, Any
     context = _build_context(p)
     role = "orchestrator" if phase == "execute" else "leaf"
     try:
-        from agent.subagent_lifecycle import SubagentLaunchRequest
-
         # NOTE: SubagentLaunchRequest has no working_directory support in
         # v0.20.0 ("Hermes delegates use isolated task environments") — the
         # repo root travels inside the context text instead (Contract §5).
-        handle = _get_lifecycle().launch(
-            SubagentLaunchRequest(
-                goal=goal,
-                context=context,
-                role=role,
-            )
-        )
+        request = _get_launch_request(goal, context, role)
+        handle = _get_lifecycle().launch(request)
     except Exception as exc:  # noqa: BLE001 — surface any launch failure
         logger.exception("subagent_lifecycle launch failed for phase %s", phase)
         return {
@@ -243,6 +236,18 @@ def dispatch_pipeline_step(p: jstate.PipelineState, phase: str) -> dict[str, Any
         "parent_session_id": handle.parent_session_id,
         "depth": handle.depth,
     }
+
+
+def _get_launch_request(goal: str, context: str, role: str) -> Any:
+    """Build a SubagentLaunchRequest.
+
+    Kept behind its own function (like :func:`_get_lifecycle`) so tests can
+    monkeypatch it without importing Hermes internals — the ``agent`` package
+    only exists inside a Hermes runtime, not in CI unit-test environments.
+    """
+    from agent.subagent_lifecycle import SubagentLaunchRequest
+
+    return SubagentLaunchRequest(goal=goal, context=context, role=role)
 
 
 def _render_prompt(p: jstate.PipelineState, phase: str) -> str:

@@ -8,6 +8,7 @@ into a tmp dir (mirroring tests/test_sync.py).
 import json
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -71,6 +72,14 @@ def fake_ctx(fake_home: Path, monkeypatch: pytest.MonkeyPatch) -> FakeCtx:
     ctx = FakeCtx()
     # tools.py dispatches via _get_lifecycle() (module-level) — wire the fake.
     monkeypatch.setattr(tools, "_get_lifecycle", lambda: ctx.subagent_lifecycle)
+    # Avoid importing Hermes internals (agent package) in unit tests.
+    monkeypatch.setattr(
+        tools,
+        "_get_launch_request",
+        lambda goal, context, role: SimpleNamespace(
+            goal=goal, context=context, role=role
+        ),
+    )
     tools.register(ctx)
     return ctx
 
