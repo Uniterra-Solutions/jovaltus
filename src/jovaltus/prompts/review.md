@@ -15,9 +15,13 @@ security holes, race conditions, correctness gaps, and contract violations.
 
 - **Run directory**: `[[run_dir]]`
 - **Plan path**: `[[plan_path]]`
+- **Repo root**: `[[repo_root]]`
 
 ## Steps
 
+0. **Read the repository first.** You have read access to the codebase at
+   `[[repo_root]]`. Read `AGENTS.md` / `CLAUDE.md` and the relevant source
+   so findings reference real code and the repo's actual conventions.
 1. Read the plan at `[[plan_path]]` to understand the intended behavior,
    requirements, and acceptance criteria.
 2. Inspect the working tree — `git status`, `git diff --stat`, `git diff`

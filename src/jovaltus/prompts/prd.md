@@ -13,13 +13,28 @@ Requirements Document (PRD) and **write it to disk**.
 ## Inputs
 
 - **Run directory** (write your artifact here): `[[run_dir]]`
+- **Repo root** (read the existing codebase here): `[[repo_root]]`
 - **User requirements**:
 
 ```
 [[user_requirements]]
 ```
 
-## Deliverable
+## Steps
+
+1. **Read the repository first.** You have read access to the codebase at
+   `[[repo_root]]`. Before writing anything, explore it so the PRD is
+   grounded in reality:
+   - `AGENTS.md` / `CLAUDE.md` (project conventions, build/test commands)
+   - Project manifest (`pyproject.toml` / `package.json` / `Cargo.toml` …)
+   - Source layout (`src/`, existing modules, entry points)
+   - Existing tests (`tests/`)
+   - Any files relevant to the requirements
+   Use `read_file` / `search_files` / `terminal` freely. For a greenfield
+   repo (empty or no relevant code), say so and proceed from the
+   requirements alone.
+2. Turn the user's raw requirements into a precise, complete Product
+   Requirements Document (PRD) and **write it to disk**.
 
 Write the PRD to `[[run_dir]]/prd.md` (Markdown). The file MUST contain the
 following sections, in order:

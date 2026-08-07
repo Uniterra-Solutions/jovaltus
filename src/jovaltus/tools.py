@@ -244,6 +244,14 @@ def _get_launch_request(goal: str, context: str, role: str) -> Any:
     Kept behind its own function (like :func:`_get_lifecycle`) so tests can
     monkeypatch it without importing Hermes internals — the ``agent`` package
     only exists inside a Hermes runtime, not in CI unit-test environments.
+
+    ``allowed_toolsets`` is deliberately left unset (None). Hermes's child
+    construction inherits the parent agent's enabled toolsets when no
+    explicit list is given (delegate_tool.py:1392-1395: ``toolsets=None`` →
+    ``child_toolsets = _strip_blocked_tools(parent_enabled)``), so pipeline
+    subagents share the main agent's toolset — they can read the repo with
+    the same file/terminal/web tools the main agent has. Passing an explicit
+    list here would REVERSE that and restrict subagents to only those tools.
     """
     from agent.subagent_lifecycle import SubagentLaunchRequest
 
@@ -257,6 +265,7 @@ def _render_prompt(p: jstate.PipelineState, phase: str) -> str:
         raise ValueError(f"no prompt for phase {phase!r}")
     text = load_prompt(prompt_name)
     text = text.replace("[[run_dir]]", p.run_dir)
+    text = text.replace("[[repo_root]]", _repo_root())
     text = text.replace("[[user_requirements]]", p.user_requirements)
     text = text.replace("[[plan_path]]", p.plan_path or "")
     text = text.replace(_MARKER_PLACEHOLDER, f"[jovaltus-pipeline:{p.tool}:{phase}]")

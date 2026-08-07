@@ -154,6 +154,10 @@ def test_plan_handler_computes_run_dir_and_dispatches(
     assert "## Repo root" in args.context
     assert str(tmp_path) in args.context
     assert args.role == "leaf"
+    # Subagents share the main agent's toolset: no explicit allowed_toolsets
+    # (None → Hermes inherits the parent's enabled toolsets, delegate_tool.py
+    # 1392-1395). Passing one would restrict the subagent instead.
+    assert getattr(args, "allowed_toolsets", None) is None
 
     p = jstate.get_pipeline()
     assert p is not None
@@ -263,6 +267,7 @@ def test_execute_handler_dispatches_orchestrator(
     assert args.role == "orchestrator"
     assert "[[plan_path]]" not in args.goal
     assert str(plan) in args.goal
+    assert getattr(args, "allowed_toolsets", None) is None
 
 
 def test_execute_handler_missing_plan(fake_ctx: FakeCtx, fake_home: Path) -> None:

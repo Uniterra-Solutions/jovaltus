@@ -13,9 +13,16 @@ then **write them to disk** as `acceptance.md`.
 
 - **Run directory** (read artifacts here, write your artifact here):
   `[[run_dir]]`
+- **Repo root** (read the existing codebase here): `[[repo_root]]`
 
 ## Steps
 
+0. **Read the repository first.** You have read access to the codebase at
+   `[[repo_root]]`. Check the project manifest, existing test framework,
+   `AGENTS.md` / `CLAUDE.md`, and relevant source so the acceptance
+   criteria are expressed in terms of the repo's real test surface and
+   conventions. For a greenfield repo, state that and proceed from the
+   artifacts.
 1. Read `[[run_dir]]/prd.md` (required) and `[[run_dir]]/design.md` (if
    present) as the acceptance basis.
 2. Derive acceptance criteria:

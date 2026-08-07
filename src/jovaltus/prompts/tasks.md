@@ -14,9 +14,15 @@ drives worker subagents level by level.
 
 - **Run directory** (read artifacts here, write your artifact here):
   `[[run_dir]]`
+- **Repo root** (read the existing codebase here): `[[repo_root]]`
 
 ## Steps
 
+0. **Read the repository first.** You have read access to the codebase at
+   `[[repo_root]]`. Understand the actual source layout (`src/`, modules,
+   entry points), test layout, and conventions so task `files` ownership
+   maps to real paths. For a greenfield repo, state that and decompose
+   from the artifacts with proposed paths.
 1. Read `[[run_dir]]/prd.md`, `[[run_dir]]/design.md`, and
    `[[run_dir]]/acceptance.md` as the decomposition basis.
 2. Decompose the work into discrete, independently executable tasks. Every

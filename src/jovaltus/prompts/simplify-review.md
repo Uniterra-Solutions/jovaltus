@@ -13,9 +13,13 @@ simplified. **Write your verdict to disk** as `verdict.json`.
 
 - **Run directory**: `[[run_dir]]`
 - **Plan path**: `[[plan_path]]`
+- **Repo root**: `[[repo_root]]`
 
 ## Steps
 
+0. **Read the repository first.** You have read access to the codebase at
+   `[[repo_root]]`. Read `AGENTS.md` / `CLAUDE.md` and the relevant source
+   so you can judge each change in its real context.
 1. Read the plan at `[[plan_path]]` to understand the intended behavior and
    task boundaries.
 2. Inspect the working tree — `git status` and `git diff` (read-only) — to

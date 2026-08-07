@@ -13,9 +13,20 @@ project described in the PRD, then **write it to disk** as `design.md`.
 
 - **Run directory** (read the PRD here, write your artifact here):
   `[[run_dir]]`
+- **Repo root** (read the existing codebase here): `[[repo_root]]`
 
 ## Steps
 
+0. **Read the repository first.** You have read access to the codebase at
+   `[[repo_root]]`. Ground your design in the existing code, not just the
+   PRD:
+   - `AGENTS.md` / `CLAUDE.md` (project conventions)
+   - Project manifest (`pyproject.toml` / `package.json` / `Cargo.toml` …)
+   - Source layout (`src/`, existing modules, entry points) — read the key
+     modules so the architecture fits the code that already exists
+   - Existing tests and CI config
+   For a greenfield repo (empty or no relevant code), state that and
+   design from the PRD alone.
 1. Read `[[run_dir]]/prd.md` (the PRD). If it is missing, read any other
    specification files present in `[[run_dir]]` and state your assumption.
 2. Design the system:

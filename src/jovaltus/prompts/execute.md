@@ -9,11 +9,14 @@ plan's task DAG to completion.
 
 - **Run directory**: `[[run_dir]]`
 - **Plan path**: `[[plan_path]]`
+- **Repo root**: `[[repo_root]]`
 
 ## Steps
 
-1. **Read the repository's `AGENTS.md` first** (repo root) and follow its
-   conventions and boundaries ("Always / Ask first / Never") throughout.
+1. **Read the repository first.** Read `[[repo_root]]`'s `AGENTS.md` and
+   follow its conventions and boundaries ("Always / Ask first / Never")
+   throughout. Explore the source and test layout so you know what the
+   tasks will touch.
 2. Read the plan at `[[plan_path]]` — the task DAG manifest with task ids,
    descriptions, owned files, deps, and topological levels.
 3. Execute the DAG **level by level**: all tasks at the same topological
