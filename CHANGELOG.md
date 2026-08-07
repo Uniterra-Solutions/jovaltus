@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v1.0.1 — 2026-08-07
+
+### Fixed
+- CI release workflow: unit tests no longer import Hermes internals
+  ('agent' package absent in the release runner) — request construction
+  routed through monkeypatchable _get_launch_request().
+
 ## v1.0.0 — 2026-08-07
 
 ### Architecture Rewrite
