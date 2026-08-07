@@ -1,8 +1,8 @@
-# Jovaltus — Hermes Plugin (Skill-Driven Development Pipeline)
+# Jovaltus — Hermes Plugin (Subagent-Driven Development Framework)
 
 ## Build & Test
 
-- `uv run pytest -v` — Run full test suite (39 tests)
+- `uv run pytest -v` — Run full test suite (102 tests)
 - `uv run ruff check .` — Lint
 - `uv run ruff format --check .` — Format check
 - `uv run mypy` — Type check (strict mode, config in `pyproject.toml`)
@@ -13,47 +13,59 @@
 
 - **Language**: Python 3.10+
 - **Package manager**: uv
-- **Framework**: fabricium ≥0.1.1 (Hermes plugin SDK — `HermesPlugin`, `git_utils`)
+- **Framework**: fabricium ≥0.1.1 (Hermes plugin SDK — `HermesPlugin`, `git_utils`, `state`)
 - **Testing**: pytest ≥8 with fabricium test harness
 - **Lint/Format**: ruff ≥0.8 + mypy ≥1.16 (`--strict` via `pyproject.toml`)
 - **Build**: hatchling (src layout)
 
 ## Project Structure
 
-- `src/jovaltus/__init__.py` — Plugin entry point: self-bootstraps fabricium, delegates to `HermesPlugin`
+- `src/jovaltus/__init__.py` — Plugin entry point: self-bootstraps fabricium, registers CLI + skills via `HermesPlugin`, then registers 4 tools + 3 hooks
+- `src/jovaltus/state.py` — Deterministic pipeline state machine + JSON persistence (`~/.hermes/jovaltus_state.json`, `"pipeline"` key)
+- `src/jovaltus/tools.py` — 4 tool handlers (`plan` / `execute` / `simplify` / `review`) + `CHAIN` table + `dispatch_pipeline_step`
+- `src/jovaltus/hooks.py` — 3 hook callbacks: `subagent_start`, `subagent_stop`, `pre_llm_call`
+- `src/jovaltus/prompts/` — 9 subagent goal prompts (prd, research, acceptance, tasks, execute, simplify-review, simplify-fix, review, review-fix)
 - `src/jovaltus/plugin.yaml` — Plugin metadata (name, version, description)
 - `src/jovaltus/SOUL.md` — Agent identity file applied during `hermes jovaltus setup`
-- `src/jovaltus/skills/` — 13 bundled agent skills (9 pipeline + 4 utility):
-  - **Pipeline**: `jovaltus` (core) → `discuss` → `design` → `to-spec` → `to-tasks` → `execute` → `simplify` → `review` + `qa`
-  - **Utility**: `agentic-debugging`, `manage-agents-md`, `project-documentation`, `manage-git-repo`
-- `tests/` — 39 pytest tests across 4 test files + conftest
-  - `test_git_utils.py` (18), `test_sync.py` (8)
-  - `integration/test_cli.py` (8), `evals/test_jovaltus_skills.py` (4)
+- `src/jovaltus/skills/` — 5 bundled utility skills:
+  `agentic-debugging`, `manage-agents-md`, `manage-git-repo`, `project-documentation`, `qa`
+- `tests/` — 102 pytest tests across 7 test files + conftest
+  - `test_state.py` (24), `test_tools.py` (18), `test_hooks.py` (17), `test_register.py` (5)
+  - `test_git_utils.py` (19), `test_sync.py` (8), `integration/test_cli.py` (8)
 
 ## Architecture
 
-v0.6.0 rewrote Jovaltus from a stateful pipeline engine into a **skill-driven
-Direct Delegate Pattern**. The plugin no longer runs subagents through tool
-handlers; it bundles agent skills that guide the orchestrator through each phase.
+v1.0.0 rearchitected Jovaltus into a **subagent-driven deterministic
+framework**. The plugin ships 4 tools whose handlers dispatch pipeline
+subagents via Hermes's `subagent_lifecycle`; a plugin-owned
+state machine (`state.py`, JSON-persisted) drives phase transitions
+deterministically; 3 hooks wire subagent lifecycle to the state machine
+and inject pipeline status every turn.
 
-- **No more tools**: `jovaltus_implement`, `jovaltus_verify`, `jovaltus_simplify` are removed
-- **No more state machine**: `state.py`, `hooks.py`, `schemas.py` deleted (~1,700 lines)
-- **No more subagent prompts**: `prompts/*.md` deleted — replaced by skill documents
-- **Fabricium handles everything**: CLI commands (`setup`, `status`, `update`) and skill bundling
+- **4 tools**: `plan` (requires `user_requirements`), `execute` /
+  `simplify` / `review` (each requires `plan`) — registered via
+  `ctx.register_tool` with `toolset="jovaltus"`, `is_async=False`
+- **State machine**: `PipelineState` + `PHASES`/`STATUSES`;
+  `get_pipeline` / `start_pipeline` / `set_phase` / `register_child` /
+  `complete_child` / `set_verdict` / `finish_pipeline` / `status_text` /
+  `reset_pipeline`
+- **3 hooks**: `subagent_start` associates children via the
+  `[jovaltus-pipeline:<tool>:<phase>]` goal marker; `subagent_stop`
+  advances the chain (plan: prd→research→acceptance→tasks→done; execute:
+  execute→done; simplify/review: verdict-driven fix loops, no cap);
+  `pre_llm_call` injects `[Jovaltus pipeline] ...` status into every turn
+- **No skill navigation**: the plugin never loads `SKILL.md` files to
+  decide pipeline flow — phase behavior lives in `prompts/*.md` goal
+  documents dispatched to subagents
 
-## Pipeline (Skill-Driven)
+## Phase Chains
 
 ```
-jovaltus (core) → discuss → design → to-spec → to-tasks → execute → simplify → review → qa
+plan:      prd → research → acceptance → tasks → done
+execute:   execute → done
+simplify:  simplify ⇄ simplify_fix (verdict-driven loop) → done on "pass"
+review:    review ⇄ review_fix (verdict-driven loop) → done on "pass"
 ```
-
-The task manifest produced by `to-tasks` is a **DAG**: tasks are nodes,
-directed edges express dependencies, and each task is assigned a topological
-level. `execute` dispatches level by level — all tasks at the same level run
-in parallel, levels run sequentially, and each level's output is merged into
-an integration branch before the next level starts. File ownership is proven
-disjoint within each level; a zero-edge DAG (everything at Level 1) is fully
-parallel.
 
 ## CLI Commands
 

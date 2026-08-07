@@ -1,9 +1,10 @@
-# Jovaltus — Hermes Plugin for Skill-Driven Development
+# Jovaltus — Hermes Plugin for Subagent-Driven Development
 
-> **Jovaltus** bundles 13 agent skills that guide an orchestrator through a
-> complete development pipeline — from requirements discovery to parallel
-> execution, adversarial review, and PRD-driven QA. The plugin itself is
-> minimal; the skills do the work.
+> **Jovaltus** is a Hermes plugin that implements a deterministic,
+> subagent-driven development framework: 4 tools (`plan`, `execute`,
+> `simplify`, `review`) dispatch isolated subagents through a plugin-owned
+> state machine, and 3 hooks drive phase transitions automatically and
+> inject pipeline status every turn. It also bundles 5 utility skills.
 
 ---
 
@@ -16,95 +17,73 @@ conventions, project structure, testing, workflows, and setup guides.
 
 ## Overview
 
-v0.6.0 rewrote Jovaltus from a stateful pipeline engine into a **skill-driven
-Direct Delegate Pattern**. The plugin no longer exposes tools
-(`jovaltus_implement`, `jovaltus_verify`, `jovaltus_simplify`); instead, it
-bundles self-contained skills that the orchestrator loads at each phase.
+v1.0.0 rearchitected Jovaltus from a skill-bundle approach into a
+**subagent-driven deterministic framework**. The plugin ships 4 tools whose
+handlers dispatch pipeline subagents via Hermes's `subagent_lifecycle` (resolved from the
+main-agent turn and cached for hook-driven continuation);
+a state machine (`state.py`, persisted to `~/.hermes/jovaltus_state.json`)
+records every phase transition (cross-session resume); and 3 hooks
+(`subagent_start`, `subagent_stop`, `pre_llm_call`) associate children,
+advance the chain, and inject a status line into every turn.
 
 ```
-discuss → design → to-spec → to-tasks → execute → simplify → (review → merge → qa)
+plan → execute → simplify → review
 ```
 
-Every skill is independently loadable via `skill_view()`. The orchestrator
-(you, or another agent) controls the flow — skills describe what to do at
-each phase, and the orchestrator decides when to move forward.
+The main agent does NOT decide pipeline flow — it calls tools and reads
+status. Every phase is one isolated subagent whose goal comes from
+`src/jovaltus/prompts/*.md`.
 
 ---
 
-## The Pipeline
+## The Tools
 
-### Phase 1: `discuss` — Requirements Discovery
+### `plan` — Build the Task DAG
 
-Interactive elicitation. Agent asks adaptive questions across 8 domains
-(scope, business flow, constraints, value, etc.), produces a minimal PRD
-under `.plan/<date>/<name>/prd.md`.
+Call with `user_requirements`. Dispatches subagents in sequence:
+prd → research → acceptance → tasks. Each writes an artifact into
+`.plan/<YYYYmmdd>/<plan_name>/` (`prd.md`, `design.md`, `acceptance.md`,
+`tasks.md`). `tasks.md` is the task DAG manifest: serial / batch /
+fully-parallel forms expressed as a mermaid DAG.
 
-### Phase 2: `design` — Dialectical Technical Design
+### `execute` — Implement the DAG
 
-Every design decision challenged: "Why this? Why not simpler?" Produces
-`design.md` covering all 10 design domains or marked N/A.
+Call with `plan` (path to a `tasks.md` manifest). Dispatches an
+**orchestrator subagent** that drives every task level by level —
+same-level tasks in parallel. Requires `delegation.max_spawn_depth >= 2`
+in the Hermes config. The orchestrator does NOT commit: the diff is left
+for simplify/review.
 
-### Phase 3: `to-spec` — Implementation Specs
+### `simplify` — Simplify the Changes
 
-Translates PRD + design into agent-executable specs. Each spec is
-self-contained: concrete stack, exact file paths, Given/When/Then
-acceptance criteria. Agents can implement without follow-up questions.
+Call with `plan`. Dispatches a simplification-review subagent, then a
+fixer, looping until the reviewer writes `verdict.json` with `"pass"`.
+No iteration cap.
 
-### Phase 4: `to-tasks` — Task Decomposition
+### `review` — Adversarially Review the Changes
 
-Decomposes specs into tasks and a scheduling document. The manifest
-expresses every subagent relationship as a **DAG**: nodes = tasks,
-directed edges = dependencies, levels = topological layers. Same-level
-tasks own disjoint files and run in parallel; later levels consume
-earlier levels' output. Produces manifest + per-task files under
-`.plan/<date>/<name>/tasks/`.
+Call with `plan`. Same loop shape, but the reviewer tries to BREAK the
+changes (bugs, assumptions, edge cases) instead of seeking simplification.
 
-### Phase 5: `execute` — DAG Dispatch
-
-Creates one isolated sparse-checkout worktree per task, then dispatches a
-subagent per task, level by level (each subagent locked to its worktree).
-All tasks at a level run simultaneously; each level's branches merge into
-an integration branch so the next level's subagents see real prior output.
-Failed tasks block their dependents. Updates manifest execution status.
-
-### Phase 6: `simplify` — Code Simplification
-
-Simplifies implemented code without changing behaviour. Dispatches a
-simplify subagent per worktree (or Direct Changes mode for single-subagent
-cleanup).
-
-### Phase 7: `review` — Adversarial Code Review
-
-Spawns a review subagent into each worktree that tries to BREAK the code.
-Exhaustive enumeration: walks every branching path, violates assumptions,
-constructs failure cascades. Depth calibrates by risk signal. Merges
-branches and cleans up worktrees after passing.
-
-### Phase 8: `qa` — PRD-Driven Acceptance Testing
-
-Exercises every PRD requirement as a real user journey. Browser for web,
-terminal for CLI/API, computer-use for desktop. Fixes issues immediately
-with regression tests; loops until all requirements pass.
+Every dispatched child's goal carries the marker
+`[jovaltus-pipeline:<tool>:<phase>]`; `subagent_stop` advances the chain,
+and `pre_llm_call` injects `[Jovaltus pipeline] tool=... phase=...
+status=... run_dir=...` each turn while a pipeline exists.
 
 ---
 
-## Bundled Skills (13 total)
+## Bundled Skills (5 utility)
 
 | Skill | Type | Purpose |
 |-------|------|---------|
-| `jovaltus` | Pipeline | Core router — triage Direct / Utility / Pipeline |
-| `discuss` | Pipeline | Interactive requirements → PRD |
-| `design` | Pipeline | Dialectical technical design |
-| `to-spec` | Pipeline | PRD + design → implementation specs |
-| `to-tasks` | Pipeline | Task decomposition — DAG manifest of subagent relationships |
-| `execute` | Pipeline | DAG dispatch — worktrees + level-parallel subagents |
-| `simplify` | Pipeline | Code simplification (behaviour preserved) |
-| `review` | Pipeline | Adversarial 4-layer code review |
-| `qa` | Pipeline | PRD-driven acceptance testing |
 | `agentic-debugging` | Utility | 5-phase evidence-driven debugging |
 | `manage-agents-md` | Utility | AGENTS.md creation, audit, maintenance |
+| `manage-git-repo` | Utility | Commit, version release, branch+PR, stacked PR |
 | `project-documentation` | Utility | Multi-file docs/ tree generation + root README sync |
-| `manage-git-repo` | Utility | Commit, release, branch+PR, stacked PR |
+| `qa` | Utility | Standalone PRD-driven acceptance testing |
+
+The bundled skills are standalone utilities — pipeline phases live in
+`src/jovaltus/prompts/*.md`, not in skills.
 
 ---
 
@@ -166,8 +145,8 @@ ln -s /Users/tszkinlai/uniterra/jovaltus ~/.hermes/profiles/jovaltus-agent/plugi
 ```bash
 hermes -p jovaltus-agent
 # 在 session 中輸入：
-# 「list all skills whose name matches jovaltus」
-# 應該看到 pipeline + utility skills 共 14 個
+# 「list all tools from the jovaltus plugin」
+# 應該看到 plan / execute / simplify / review 四個 tools
 ```
 
 ### 日常使用
@@ -187,19 +166,25 @@ cd /projects/app-alpha
 hermes -p jovaltus-agent
 ```
 
-### 使用 Pipeline
+### 使用 Pipeline（工具驅動）
 
 ```bash
 # 1. 啟動 session
 hermes -p jovaltus-agent
 
-# 2. 載入第一個 skill，開始需求發現
-#    「load skill discuss」
+# 2. 呼叫 plan tool（傳 user_requirements）
+#    「call the plan tool with user_requirements='<你的需求>'」
+#    → 自動依序派出 prd → research → acceptance → tasks 四個 subagents
 
-# 3. 按順序載入：discuss → design → to-spec → to-tasks
-#    → execute → simplify → review → qa
+# 3. plan 完成後，呼叫 execute tool（傳 tasks.md 路徑）
+#    「call the execute tool with plan='.plan/<YYYYmmdd>/<plan_name>/tasks.md'」
 
-# 每個 skill 會指導你完成該階段，產出對應的 artifacts
+# 4. 需要時依序呼叫 simplify / review
+#    「call the simplify tool with plan='.plan/<YYYYmmdd>/<plan_name>'」
+#    「call the review tool with plan='.plan/<YYYYmmdd>/<plan_name>'」
+
+# 每個 tool 啟動後，pipeline 由 state machine + hooks 自動推進；
+# 每輪 turn 都會看到 [Jovaltus pipeline] 狀態行
 ```
 
 ### 疑難排解
@@ -210,31 +195,39 @@ hermes -p jovaltus-agent
 | `No inference provider configured` | Profile config 缺少 model 設定。參考 Step 4 補上 |
 | 401 Authentication Error | 確認 profile 的 `.env` 有 API key |
 | `Unknown command: jovaltus` | Plugin 未啟用。執行 `hermes plugins enable jovaltus` |
+| execute 回傳 `max_spawn_depth` 錯誤 | 設定 `hermes config set delegation.max_spawn_depth 2` |
 
 ---
 
 ## Architecture
 
-### Skill-Driven Direct Delegate Pattern
+### Subagent-Driven Deterministic Framework
 
-Jovaltus v0.6.0 is not a pipeline engine — it's a skill bundle. The plugin:
+Jovaltus v1.0.0 is a deterministic framework, not a skill bundle. The plugin:
 
 1. **Self-bootstraps** fabricium on import (survives Hermes venv recreation)
 2. **Registers CLI commands** via `fabricium.HermesPlugin` (`setup`, `status`, `update`)
-3. **Bundles 13 skills** auto-discovered by Fabricium from `src/jovaltus/skills/`
+3. **Registers 4 tools** (`plan`, `execute`, `simplify`, `review`) via
+   `ctx.register_tool` — each handler starts a pipeline and dispatches the
+   first-phase subagent
+4. **Registers 3 hooks** via `ctx.register_hook` — `subagent_start`
+   associates children, `subagent_stop` advances the chain, `pre_llm_call`
+   injects status
+5. **Persists pipeline state** to `~/.hermes/jovaltus_state.json` under the
+   `"pipeline"` key (fabricium-managed; the `"profiles"` key is untouched)
 
-That's it. No tools, no state machine, no hooks, no subagent spawning logic.
-The orchestrator loads skills and follows their guidance.
+The main agent calls tools and reads status; the state machine + hooks
+decide the flow.
 
 ### Why This Architecture?
 
-| Old (v0.5.x) | New (v0.6.0) |
+| Old (v0.6.0 skill bundle) | New (v1.0.0 framework) |
 |---------------|---------------|
-| 3 tools + state machine + hooks + schemas | 13 self-contained skills |
-| ~2,200 lines of Python | ~55 lines of Python |
-| Pipeline hardcoded in tool handlers | Pipeline defined by skill documents |
-| Edit prompts → edit Python | Edit skills → edit Markdown |
-| Subagents spawned by plugin code | Subagents spawned by orchestrator following skill guidance |
+| Bundled skills guide the orchestrator phase by phase | 4 tools + state machine + 3 hooks drive the pipeline |
+| Orchestrator navigates skills phase by phase | Deterministic chains: plan (prd→research→acceptance→tasks→done), execute, simplify/review verdict loops |
+| No plugin tools, no state machine | 4 tools registered on ctx; `PipelineState` persisted to JSON |
+| Behavior in skill documents | Behavior in `prompts/*.md` goal documents + `state.py` + `hooks.py` |
+| Subagents spawned by orchestrator following skills | Subagents dispatched by plugin tool handlers + hooks viaa `delegate_task` |
 
 ---
 
@@ -247,30 +240,28 @@ jovaltus/
 ├── CHANGELOG.md
 ├── pyproject.toml
 ├── src/jovaltus/
-│   ├── __init__.py          # Entry point (55 lines) — fabricium self-bootstrap + HermesPlugin
-│   ├── plugin.yaml          # Plugin metadata
+│   ├── __init__.py          # register(): fabricium + 4 tools + 3 hooks (67 lines)
+│   ├── state.py             # Deterministic state machine + JSON persistence
+│   ├── tools.py             # 4 tool handlers + CHAIN + dispatch_pipeline_step
+│   ├── hooks.py             # subagent_start / subagent_stop / pre_llm_call
+│   ├── prompts/             # 9 subagent goal prompts (prd, research, acceptance, tasks, execute, simplify-review, simplify-fix, review, review-fix)
+│   ├── plugin.yaml          # Plugin metadata (version 1.0.0)
 │   ├── SOUL.md              # Agent identity
-│   └── skills/              # 13 bundled skills (9 pipeline + 4 utility)
-│       ├── jovaltus/        # Core router — triage + pipeline entry
-│       ├── discuss/         # Requirements discovery → PRD
-│       ├── design/          # Dialectical technical design
-│       ├── to-spec/         # PRD → implementation specs
-│       ├── to-tasks/        # Task decomposition — DAG manifest
-│       ├── execute/         # DAG dispatch + worktree setup
-│       ├── simplify/        # Code simplification
-│       ├── review/          # Adversarial code review
-│       ├── qa/              # PRD-driven acceptance testing
+│   └── skills/              # 5 bundled utility skills
 │       ├── agentic-debugging/
 │       ├── manage-agents-md/
+│       ├── manage-git-repo/
 │       ├── project-documentation/
-│       └── manage-git-repo/
+│       └── qa/
 ├── tests/
-│   ├── test_git_utils.py    # 18 tests
+│   ├── test_state.py        # 24 tests
+│   ├── test_tools.py        # 18 tests
+│   ├── test_hooks.py        # 17 tests
+│   ├── test_register.py     # 5 tests
+│   ├── test_git_utils.py    # 19 tests
 │   ├── test_sync.py         # 8 tests
-│   ├── integration/
-│   │   └── test_cli.py      # 8 tests
-│   └── evals/
-│       └── test_jovaltus_skills.py  # 4 eval tests
+│   └── integration/
+│       └── test_cli.py      # 8 tests
 └── docs/                    # Project documentation
 ```
 
@@ -280,16 +271,17 @@ jovaltus/
 
 | Aspect | Decision |
 |--------|----------|
-| **Architecture** | Skill-driven Direct Delegate — plugin is minimal, skills do the work |
+| **Architecture** | Subagent-driven deterministic framework — tools + state machine + hooks |
+| **Pipeline control** | State machine + hooks decide flow; main agent calls tools and reads status |
+| **Phase chains** | plan: prd→research→acceptance→tasks→done; execute: execute→done; simplify/review: verdict-driven fix loops (no cap) |
+| **State persistence** | `~/.hermes/jovaltus_state.json` (`"pipeline"` key) — cross-session resume |
 | **Profile** | `jovaltus-agent`, separate from any other mode |
 | **Plugin sharing** | PyPI (trusted publisher) + `hermes plugins enable` |
 | **Profile setup** | `hermes jovaltus setup` — interactive, TTY-aware |
 | **Profile binding** | Not directory-bound — same profile works across projects |
-| **Pipeline control** | Orchestrator loads skills in sequence; skills describe what to do |
-| **Parallel execution** | Flat — all tasks simultaneous, file ownership proven disjoint |
 | **Code review** | Adversarial — tries to break, not just check |
-| **QA** | PRD-driven user journeys, not unit tests |
-| **Skill style** | Progressive disclosure, verb-form naming, independently loadable |
+| **QA** | PRD-driven user journeys via the standalone `qa` skill |
+| **Skill style** | 5 standalone utilities; progressive disclosure, independently loadable |
 
 ---
 

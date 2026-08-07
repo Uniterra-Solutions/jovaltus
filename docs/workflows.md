@@ -16,38 +16,97 @@ Step-by-step recipes for common development tasks.
 3. Add supporting files under `references/`, `assets/`, `templates/` as needed
 4. Fabricium auto-discovers skills — no manual registration required
 5. Add tests if the skill introduces new CLI or sync behavior
-6. Update `docs/architecture.md` Phase Details table
+6. Update `docs/architecture.md` Bundled Skills table
 
-## Running the Full Pipeline
+## Running a Tool-Driven Pipeline
 
-1. Start Hermes: `hermes -p jovaltus-agent`
-2. `jovaltus` skill auto-loads → triage: Direct / Utility / Pipeline
-3. Load `discuss` skill → elicit requirements → produce `prd.md`
-4. Load `design` skill → challenge every decision → produce `design.md`
-5. Load `to-spec` skill → translate to implementation specs
-6. Load `to-tasks` skill → decompose into tasks; produce the DAG manifest
-7. Load `execute` skill → create worktrees + dispatch subagents level by level (DAG)
-8. Load `simplify` skill → simplify code without changing behaviour
-9. Load `review` skill → adversarial review per worktree → merge
-10. Load `qa` skill → PRD-driven acceptance testing
+The 4 tools (`plan`, `execute`, `simplify`, `review`) are registered with
+toolset `jovaltus` (`src/jovaltus/tools.py:85-140`). Each call starts a
+deterministic pipeline whose phases advance automatically via the
+`subagent_stop` hook — the main agent does not drive the chain.
+
+### 1. `plan` — build the task DAG
+
+Call the `plan` tool with `user_requirements` (required string). It
+computes the run dir `<repo_root>/.plan/<YYYYmmdd>/<plan_name>/` and dispatches
+subagents in sequence: prd → research → acceptance → tasks
+(`src/jovaltus/tools.py:57-67`). Each subagent writes its artifact into the
+run dir:
+
+```
+.plan/<YYYYmmdd>/<plan_name>/
+├── prd.md          # PRD subagent output
+├── design.md       # research subagent output
+├── acceptance.md   # acceptance criteria subagent output
+└── tasks.md        # task DAG manifest (serial / batch / fully-parallel forms + mermaid DAG)
+```
+
+When the chain finishes, `status_text` reports
+`plan complete: <run_dir>/tasks.md` (`src/jovaltus/state.py:227-228`) and
+`pre_llm_call` injects that line into the next turn.
+
+### 2. `execute` — implement the DAG
+
+Call the `execute` tool with `plan` = path to a `tasks.md` manifest
+(required; the file must exist). **Precondition:** the host Hermes config
+must have `delegation.max_spawn_depth >= 2` (the execute orchestrator is a
+depth-1 child that spawns its own workers). The handler checks the
+effective value and returns
+`{"status":"error","message":"execute requires delegation.max_spawn_depth >= 2"}`
+otherwise (`src/jovaltus/tools.py:237-248`, `351-366`).
+
+```bash
+# set once in the Hermes config (the plugin never edits it for you)
+hermes config set delegation.max_spawn_depth 2
+```
+
+The execute orchestrator reads the task DAG and drives every task level by
+level — same-level tasks in parallel. It must NOT commit: the diff is left
+in the working tree for simplify/review (`src/jovaltus/prompts/execute.md`).
+
+### 3. `simplify` — simplify the changes
+
+Call the `simplify` tool with `plan` = path to the plan directory (the
+handler resolves the parent of the manifest). It dispatches a
+simplification-review subagent; if the reviewer writes
+`verdict.json` `{"verdict":"fix",...}`, a fixer subagent applies the
+suggestions and the reviewer re-runs. Loop until the verdict is `"pass"`
+(no iteration cap — `src/jovaltus/hooks.py:110-132`).
+
+### 4. `review` — adversarially review the changes
+
+Call the `review` tool with `plan` = path to the plan directory. Same loop
+shape as simplify, but the reviewer tries to BREAK the changes (bugs,
+assumptions, edge cases) instead of seeking simplification.
+
+### Loop mechanics (shared)
+
+- Every dispatched child's goal carries the marker
+  `[jovaltus-pipeline:<tool>:<phase>]`; `subagent_start` associates the
+  child with the pipeline (`src/jovaltus/hooks.py:42-63`).
+- `subagent_stop` advances the chain when the active child completes
+  (`src/jovaltus/hooks.py:65-88`).
+- `pre_llm_call` injects a status line each turn while a pipeline exists
+  (`src/jovaltus/hooks.py:91-104`), so you always see the current
+  tool/phase/status/run_dir.
 
 ## Running Tests During Development
 
 ```bash
-# Quick: unit tests only (no integration, no evals)
-uv run pytest tests/ -v --ignore=tests/integration --ignore=tests/evals
+# Full suite (102 tests)
+uv run pytest -v
 
-# Unit + integration (no Docker needed)
-uv run pytest -v --ignore=tests/evals
+# Unit tests only (no integration)
+uv run pytest tests/ -v --ignore=tests/integration
 
-# Eval tests (need Docker + API keys)
-EVAL_CANDIDATE_PROVIDER=deepseek \
-EVAL_CANDIDATE_MODEL=deepseek/deepseek-chat \
-EVAL_CANDIDATE_API_KEY=$DEEPSEEK_KEY \
-EVAL_JUDGE_PROVIDER=anthropic \
-EVAL_JUDGE_MODEL=anthropic/claude-sonnet-4 \
-EVAL_JUDGE_API_KEY=$ANTHROPIC_KEY \
-uv run pytest tests/evals/ -v -s
+# Single file / single test
+uv run pytest -v tests/test_state.py
+uv run pytest -v -k "test_pipeline_transitions"
+
+# Lint, format, and type gates (must all pass before commit)
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy
 ```
 
 ## Pre-commit Workflow
@@ -68,8 +127,9 @@ git commit --no-verify -m "..."
 
 1. Bump version in `pyproject.toml` `[project] version`
 2. Bump version in `src/jovaltus/plugin.yaml` `version`
-3. If skills changed, update their `SKILL.md` files (frontmatter is `name` + `description` only)
-4. Update `CHANGELOG.md`
+3. Add a `## v<version>` entry at the top of `CHANGELOG.md`
+   (Keep a Changelog format)
+4. Update `docs/` + root `README.md` if the release changes behavior
 5. Tag: `git tag v<version> && git push --tags` (triggers PyPI trusted publisher)
 
 ## Editing a Skill
@@ -116,11 +176,16 @@ Workflow D example:
    - D.6: `gh stack push` + `gh stack submit`
 4. Merge with `gh stack merge --yes --squash` when reviews are approved
 
-## Debugging a Subagent
+## Debugging a Pipeline Run
 
-1. Check the worktree log: `git -C .worktrees/<task>/ log --oneline`
-2. Check subagent output in the terminal tab (if using Hermes TUI)
-3. For eval tests: check Docker container logs
+1. Check the status line injected by `pre_llm_call` each turn —
+   `[Jovaltus pipeline] tool=<tool> phase=<phase> status=<status> run_dir=<abs>`
+2. Inspect the persisted state: `cat ~/.hermes/jovaltus_state.json`
+   (pipeline data under the `"pipeline"` key)
+3. Inspect run artifacts: `ls .plan/<YYYYmmdd>/<plan_name>/`
+4. For simplify/review verdict issues, check `verdict.json` in the run dir
+5. Check subagent output in the terminal tab (if using Hermes TUI)
+6. For the Docker E2E gate: check container logs (`docker exec jovaltus-e2e ...`)
 
 ## How to Update
 
@@ -131,7 +196,9 @@ Workflow D example:
 ## Find It Fast
 
 ```bash
-ls src/jovaltus/skills/                              # All skills
-grep -rn '^name:' src/jovaltus/skills/*/SKILL.md       # Skill names
-cat src/jovaltus/__init__.py                           # Plugin entry (55 lines)
+ls src/jovaltus/                             # Plugin source modules
+cat src/jovaltus/tools.py                    # 4 tool handlers + CHAIN
+cat src/jovaltus/hooks.py                    # 3 hook callbacks
+ls src/jovaltus/skills/                      # All skills
+grep -rn '^name:' src/jovaltus/skills/*/SKILL.md  # Skill names
 ```

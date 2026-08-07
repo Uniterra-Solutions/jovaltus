@@ -15,10 +15,10 @@ Test framework, commands, conventions, and layout.
 ## Commands
 
 ```bash
-uv run pytest -v                          # Full suite (39 tests)
-uv run pytest -v tests/test_git_utils.py  # Single file
-uv run pytest -v -k "test_get_diff"       # Single test
-uv run pytest -v --ignore=tests/evals     # Skip eval tests (no Docker/API needed)
+uv run pytest -v                          # Full suite (102 tests)
+uv run pytest -v tests/test_state.py      # Single file
+uv run pytest -v -k "test_verdict"        # Single test
+uv run pytest -v --ignore=tests/integration  # Unit tests only (no Docker CLI tests)
 ```
 
 ## Test Directory Layout
@@ -27,18 +27,20 @@ uv run pytest -v --ignore=tests/evals     # Skip eval tests (no Docker/API neede
 tests/
 ├── conftest.py              # Shared fixtures (git_repo, clear_task_state)
 ├── __init__.py
-├── test_git_utils.py        # 18 tests — git operations via fabricium
+├── test_state.py            # 24 tests — state machine transitions + cross-session resume
+├── test_tools.py            # 18 tests — 4 tool handlers + dispatch
+├── test_hooks.py            # 17 tests — hook callbacks + chain advancement
+├── test_register.py         # 5 tests — registration wiring (4 tools + 3 hooks)
+├── test_git_utils.py        # 19 tests — git operations via fabricium
 ├── test_sync.py             # 8 tests — state persistence + skill sync
-├── integration/
-│   ├── conftest.py          # Integration fixtures
-│   └── test_cli.py          # 8 tests — CLI (setup, status, update)
-└── evals/
-    ├── conftest.py          # Eval harness fixtures (Docker + LLM APIs)
-    ├── __init__.py
-    ├── test_jovaltus_skills.py  # 4 tests — end-to-end pipeline eval
-    ├── tasks.py             # Eval task definitions
-    └── rubrics.py           # Eval scoring rubrics
+└── integration/
+    ├── conftest.py          # Integration fixtures
+    └── test_cli.py          # 8 tests — CLI (setup, status, update)
 ```
+
+There is **no `tests/evals/`** in v1.0.0 — the eval harness measured skill
+lift for the removed pipeline skills. Its role as the behavioral gate is
+taken over by the Phase 7 Docker E2E verification (below).
 
 ## Fixture Patterns
 
@@ -51,10 +53,12 @@ Resets in-memory state before every test. Runs automatically via `autouse=True`.
 Creates a temporary git repo with an initial commit. Uses `tmp_path` — each test
 gets an isolated repo. Configures git user + email for commit.
 
-### `eval_harness` (session-scoped, `tests/evals/conftest.py`)
+### Fake ctx (tool/hook/register tests)
 
-Docker-based harness for pipeline evaluation. Requires LLM API keys.
-Creates profiles: `bare` (no Jovaltus) and `jovaltus-agent` (with Jovaltus).
+`test_tools.py`, `test_hooks.py`, and `test_register.py` drive handlers and
+hook callbacks with a fake ctx object that records
+`register_tool` / `register_hook` / `subagent_lifecycle` calls — no live Hermes
+runtime or LLM is needed.
 
 ## Fixture Usage
 
@@ -69,21 +73,42 @@ def test_something(git_repo):
 
 No mocking by default. Tests use real git repos (`tmp_path`) and real subprocess
 calls. The `git_repo` fixture provides real git repos in temp directories.
+State-machine tests monkeypatch `fabricium.state._get_global_hermes_home` to a
+tmp dir to simulate cross-session resume without touching the real
+`~/.hermes/jovaltus_state.json`.
 
-## Eval Tests
+## Behavioral Gate: Phase 7 Docker E2E
 
-| File | Purpose |
-|------|---------|
-| `tests/evals/tasks.py` | Defines eval scenarios (requirements → expected outcome) |
-| `tests/evals/rubrics.py` | Defines scoring criteria for judging results |
-| `tests/evals/test_jovaltus_skills.py` | Runs pipeline end-to-end in Docker container |
+The eval harness was removed in v1.0.0. The behavioral gate is a **Docker
+E2E verification** run by the orchestrator after the local suite passes.
+It verifies the plugin's live behavior inside a real Hermes container:
 
-Eval tests require:
-- Docker installed and running
-- LLM API keys in environment variables
-- `fabricium.evals.SkillEvalHarness`
-
-Run with: `uv run pytest tests/evals/ -v -s` (slow, API-dependent)
+1. **Temp HERMES_HOME:** copy `~/.hermes/config.yaml` + `~/.hermes/.env`
+   into a fresh `<tmp>/.hermes/`.
+2. **Derived image** (base pins uv `exclude-newer`; relax it + install
+   fabricium):
+   ```dockerfile
+   FROM <hermes-agent-base-image>
+   ENV UV_EXCLUDE_NEWER=2099-01-01
+   RUN uv pip install --python /opt/hermes/.venv/bin/python fabricium
+   ```
+3. **Long-running container** with the temp HERMES_HOME mounted at
+   `/opt/data` and `HERMES_HOME=/opt/data`.
+4. **Install the plugin** inside the container (pip entry point or copy into
+   `/opt/data/plugins/` + `hermes plugins enable jovaltus`).
+5. **Verify agent behavior** (`docker exec jovaltus-e2e hermes chat -q "<prompt>"`):
+   - `hermes plugins list` → `jovaltus` enabled
+   - `hermes jovaltus status` → exit 0
+   - A prompt that triggers a plugin tool, e.g.
+     `docker exec jovaltus-e2e hermes chat -q "call the plan tool with user_requirements='build a hello world CLI'"`
+     → exit code 0, no plugin traceback. Assert on side effects + exit code,
+     NOT exact LLM text (non-deterministic output):
+     - plan tool spawns a subagent: `subagent_start`/`subagent_stop` hooks fire
+     - state file written: `/opt/data/jovaltus_state.json` contains a
+       `"pipeline"` key with `tool=plan`
+     - `pre_llm_call` injection: pipeline status visible in a follow-up turn
+6. **Cleanup:** `docker rm -f jovaltus-e2e`, `docker rmi jovaltus-e2e`,
+   remove the temp HERMES_HOME, `docker builder prune -a -f` (keep base image).
 
 ## CI / Pre-commit
 
@@ -98,14 +123,13 @@ Pre-commit hooks (`pre-commit run --all-files`):
 |---------|---------|
 | Unit tests | `test_<module>.py` |
 | Integration tests | `test_<feature>.py` in `tests/integration/` |
-| Eval tests | `test_jovaltus_<aspect>.py` in `tests/evals/` |
 | Shared fixtures | `conftest.py` at each level |
 
 ## Conventions
 
 - `autouse=True` fixture resets state before each test
 - `git_repo` fixture provides isolated repos
-- No mocking — tests exercise real code paths
+- No mocking — tests exercise real code paths (fake ctx only for tool/hook/register)
 - Test functions are short and focused on one behaviour
 - Integration tests use their own `conftest.py`
 
