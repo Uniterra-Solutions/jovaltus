@@ -1,1 +1,0 @@
-"""Jovaltus skill evaluation tests."""
