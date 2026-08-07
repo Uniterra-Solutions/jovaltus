@@ -297,13 +297,17 @@ def _build_context(p: jstate.PipelineState) -> str:
 def _repo_root() -> str:
     """The main agent's working directory, inherited programmatically.
 
-    Prefers ``TERMINAL_CWD`` (Hermes sets this to the main agent's working
-    directory and child tools read it — delegate_tool.py:874-891 lists it
-    as the first workspace-hint candidate), falling back to ``Path.cwd()``.
-    The run directory and subagent contexts are rooted here so the pipeline
-    writes into the user's actual repo regardless of which directory the
-    plugin process happened to start in.
+    Prefers ``agent.runtime_cwd.resolve_agent_cwd()`` — the canonical
+    resolver the conversation loop, prompt builder, and context-file
+    discovery use. It honors the per-session cwd contextvar the desktop
+    app pins around every turn, then falls back to ``TERMINAL_CWD``, then
+    the process cwd. Reading only ``TERMINAL_CWD`` rooted runs at the
+    gateway launch dir in desktop sessions (often ``~``), so plans landed
+    in ``~/.plan`` instead of ``<repo>/.plan``.
     """
+    resolved = _resolve_agent_cwd()
+    if resolved:
+        return resolved
     env_cwd = os.environ.get("TERMINAL_CWD", "").strip()
     if env_cwd:
         try:
@@ -313,6 +317,20 @@ def _repo_root() -> str:
         except Exception:  # noqa: BLE001 — fall through to cwd
             pass
     return str(Path.cwd())
+
+
+def _resolve_agent_cwd() -> str:
+    """The Hermes agent's working directory, or ``""`` when unavailable.
+
+    Imported lazily and guarded so unit tests / CI (which lack the Hermes
+    runtime) fall through to the TERMINAL_CWD / cwd chain.
+    """
+    try:
+        from agent.runtime_cwd import resolve_agent_cwd
+
+        return str(resolve_agent_cwd())
+    except Exception:  # noqa: BLE001 — no Hermes runtime (CI) or broken import
+        return ""
 
 
 # ── Tool handlers ----------------------------------------------------------

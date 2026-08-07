@@ -199,6 +199,27 @@ def test_plan_handler_inherits_terminal_cwd(
     assert str(repo) in result["run_dir"]
 
 
+def test_plan_handler_prefers_session_cwd_over_terminal_cwd(
+    fake_ctx: FakeCtx, fake_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The repo root prefers the Hermes per-session cwd over TERMINAL_CWD.
+
+    Regression: desktop sessions set TERMINAL_CWD to the gateway launch dir
+    (often ~), so a naive TERMINAL_CWD read rooted runs at ~/.plan instead of
+    <repo>/.plan. Hermes's canonical resolver (agent.runtime_cwd) honors the
+    per-session cwd contextvar the desktop pins around every turn.
+    """
+    session_cwd = tmp_path / "session-workdir"
+    session_cwd.mkdir()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("TERMINAL_CWD", str(tmp_path))  # launch dir, like desktop
+    monkeypatch.setattr(tools, "_resolve_agent_cwd", lambda: str(session_cwd))
+    result = json.loads(tools.plan_handler({"user_requirements": "Build an app"}))
+    assert result["status"] == "started"
+    assert Path(result["run_dir"]).is_relative_to(session_cwd)
+    assert str(session_cwd) in result["run_dir"]
+
+
 def test_plan_handler_run_dir_suffix(
     fake_ctx: FakeCtx, fake_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
