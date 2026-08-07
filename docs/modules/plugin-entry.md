@@ -85,10 +85,10 @@ signature `handler(args, **kwargs) -> str` (JSON result string):
 
 | Tool | Schema (`required`) | Handler | Description |
 |------|---------------------|---------|-------------|
-| `plan` | `{"user_requirements": ...}` | `plan_handler` (`tools.py:227-234`) | Start the Jovaltus planning pipeline: PRD → research → acceptance → task DAG subagents |
-| `execute` | `{"plan": ...}` | `execute_handler` (`tools.py:237-248`) | Execute the task DAG; requires `delegation.max_spawn_depth >= 2` |
-| `simplify` | `{"plan": ...}` | `simplify_handler` (`tools.py:251-262`) | Simplify the changes; review → fix loop until pass |
-| `review` | `{"plan": ...}` | `review_handler` (`tools.py:265-274`) | Adversarially review the changes; review → fix loop until pass |
+| `plan` | `{"user_requirements": ...}` | `plan_handler` (`tools.py:295-310`) | USE WHEN the user wants a software-engineering request turned into an implementation plan (or needs planning for a complex request). Runs PRD → research → acceptance → task DAG |
+| `execute` | `{"plan": ...}` | `execute_handler` (`tools.py:312-329`) | USE WHEN a plan exists and you want to implement its software-engineering work. Requires `delegation.max_spawn_depth >= 2` |
+| `simplify` | `{"plan": ...}` | `simplify_handler` (`tools.py:331-346`) | USE WHEN the plan's implementation exists and you want its code simplified |
+| `review` | `{"plan": ...}` | `review_handler` (`tools.py:348-363`) | USE WHEN the plan's implementation exists and you want its code reviewed |
 
 ## Hook Registration (`hooks.init`)
 
