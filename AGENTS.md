@@ -2,7 +2,7 @@
 
 ## Build & Test
 
-- `uv run pytest -v` — Run full test suite (102 tests)
+- `uv run pytest -v` — Run full test suite (123 tests)
 - `uv run ruff check .` — Lint
 - `uv run ruff format --check .` — Format check
 - `uv run mypy` — Type check (strict mode, config in `pyproject.toml`)
@@ -20,18 +20,19 @@
 
 ## Project Structure
 
-- `src/jovaltus/__init__.py` — Plugin entry point: self-bootstraps fabricium, registers CLI + skills via `HermesPlugin`, then registers 4 tools + 3 hooks
+- `src/jovaltus/__init__.py` — Plugin entry point: self-bootstraps fabricium, registers CLI + skills via `HermesPlugin` (subclassed as `_JovaltusPlugin` to auto-configure `delegation.max_spawn_depth` on setup/update), then registers 4 tools + 3 hooks
 - `src/jovaltus/state.py` — Deterministic pipeline state machine + JSON persistence (`~/.hermes/jovaltus_state.json`, `"pipeline"` key)
-- `src/jovaltus/tools.py` — 4 tool handlers (`plan` / `execute` / `simplify` / `review`) + `CHAIN` table + `dispatch_pipeline_step`
-- `src/jovaltus/hooks.py` — 3 hook callbacks: `subagent_start`, `subagent_stop`, `pre_llm_call`
+- `src/jovaltus/tools.py` — 4 tool handlers (`plan` / `execute` / `simplify` / `review`) + `CHAIN` table + `dispatch_pipeline_step` + completion-routing capture
+- `src/jovaltus/hooks.py` — 3 hook callbacks: `subagent_start`, `subagent_stop`, `pre_llm_call`; pushes a completion event to `process_registry.completion_queue` on terminal states so the main agent is notified
+- `src/jovaltus/setup_config.py` — Text-based YAML edit ensuring `delegation.max_spawn_depth >= 2` in profile configs (no yaml dependency)
 - `src/jovaltus/prompts/` — 9 subagent goal prompts (prd, research, acceptance, tasks, execute, simplify-review, simplify-fix, review, review-fix)
 - `src/jovaltus/plugin.yaml` — Plugin metadata (name, version, description)
 - `src/jovaltus/SOUL.md` — Agent identity file applied during `hermes jovaltus setup`
 - `src/jovaltus/skills/` — 5 bundled utility skills:
   `agentic-debugging`, `manage-agents-md`, `manage-git-repo`, `project-documentation`, `qa`
-- `tests/` — 102 pytest tests across 7 test files + conftest
-  - `test_state.py` (24), `test_tools.py` (18), `test_hooks.py` (17), `test_register.py` (5)
-  - `test_git_utils.py` (19), `test_sync.py` (8), `integration/test_cli.py` (8)
+- `tests/` — 123 pytest tests across 8 test files + conftest
+  - `test_state.py` (25), `test_tools.py` (23), `test_hooks.py` (23), `test_register.py` (5)
+  - `test_git_utils.py` (19), `test_sync.py` (8), `test_setup_config.py` (12), `integration/test_cli.py` (8)
 
 ## Architecture
 
@@ -52,7 +53,9 @@ and inject pipeline status every turn.
 - **3 hooks**: `subagent_start` associates children via the
   `[jovaltus-pipeline:<tool>:<phase>]` goal marker; `subagent_stop`
   advances the chain (plan: prd→research→acceptance→tasks→done; execute:
-  execute→done; simplify/review: verdict-driven fix loops, no cap);
+  execute→done; simplify/review: verdict-driven fix loops, no cap) and
+  pushes a completion event to `process_registry.completion_queue` on
+  terminal states so the main agent is notified;
   `pre_llm_call` injects `[Jovaltus pipeline] ...` status into every turn
 - **No skill navigation**: the plugin never loads `SKILL.md` files to
   decide pipeline flow — phase behavior lives in `prompts/*.md` goal

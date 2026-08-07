@@ -158,16 +158,24 @@ input (e.g. missing `plan` path, nonexistent plan file).
 
 | Tool | Handler | Input | Behavior |
 |------|---------|-------|----------|
-| `plan` | `plan_handler` (`tools.py:295-310`) | `user_requirements` (required) | Computes run dir `<repo_root>/.plan/<YYYYmmdd>/<plan_name>/` (`tools.py:400-417`; repo root inherited from main agent via `TERMINAL_CWD`, plan_name = kebab-case of first ~6 words, `-2`/`-3`… suffix on collision); creates the run dir; starts pipeline phase `prd` |
-| `execute` | `execute_handler` (`tools.py:237-248`) | `plan` (required, must exist) | Precondition: effective `delegation.max_spawn_depth >= 2` (`tools.py:351-366`), else returns error; starts pipeline phase `execute` with `role="orchestrator"` |
-| `simplify` | `simplify_handler` (`tools.py:251-262`) | `plan` (required, must exist) | Starts pipeline phase `simplify` (reviewer) |
-| `review` | `review_handler` (`tools.py:265-274`) | `plan` (required, must exist) | Starts pipeline phase `review` (reviewer) |
+| `plan` | `plan_handler` (`tools.py:379-393`) | `user_requirements` (required) | Computes run dir `<repo_root>/.plan/<YYYYmmdd>/<plan_name>/` (`tools.py:488-503`; repo root inherited from the main agent via `resolve_agent_cwd()` — per-session cwd → `TERMINAL_CWD` → process cwd, `tools.py:337-376`; plan_name = kebab-case of first ~6 words, `-2`/`-3`… suffix on collision); creates the run dir; starts pipeline phase `prd` |
+| `execute` | `execute_handler` (`tools.py:395-407`) | `plan` (required, must exist) | Precondition: effective `delegation.max_spawn_depth >= 2` (`tools.py:519-569`), else returns error; starts pipeline phase `execute` with `role="orchestrator"` |
+| `simplify` | `simplify_handler` (`tools.py:409-421`) | `plan` (required, must exist) | Starts pipeline phase `simplify` (reviewer) |
+| `review` | `review_handler` (`tools.py:423-434`) | `plan` (required, must exist) | Starts pipeline phase `review` (reviewer) |
 
 The repo root is passed to children twice: as a `[[repo_root]]` token in
-every prompt (`tools.py:253-263`, substituted with the main agent's working
-dir from `TERMINAL_CWD`), and inside the `context` text
-(`tools.py:185-192`) — never as a tool parameter (the `delegate_task`
+every prompt (`tools.py:313-325`, substituted with the main agent's working
+dir from `_repo_root()`), and inside the `context` text
+(`tools.py:327-335`) — never as a tool parameter (the `delegate_task`
 handler ignores `workspace_path`/`max_spawn_depth`).
+
+When a pipeline reaches a terminal state (done or failed), `subagent_stop`
+pushes a completion event onto the shared `process_registry.completion_queue`
+(`hooks.py:180-216`) — the same rail background terminal tasks use — so the
+desktop/TUI, CLI, and gateway surfaces wake the main agent with a
+"pipeline complete" turn instead of leaving it silent until the user's next
+message. Routing metadata (session key, UI session id) is captured on the
+first main-turn dispatch (`tools.py:79-99`).
 
 Every subagent reads the repository first. Each prompt's Step 0 instructs
 the child to explore `[[repo_root]]` — `AGENTS.md`/`CLAUDE.md`, the project

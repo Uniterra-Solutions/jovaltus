@@ -45,15 +45,17 @@ toolset, so planning, design, and review are grounded in the real codebase.
 Call with `user_requirements`. Dispatches subagents in sequence:
 prd → research → acceptance → tasks. Each writes an artifact into
 `.plan/<YYYYmmdd>/<plan_name>/` (`prd.md`, `design.md`, `acceptance.md`,
-`tasks.md`). `tasks.md` is the task DAG manifest: serial / batch /
-fully-parallel forms expressed as a mermaid DAG.
+`tasks.md`). `tasks.md` is the task DAG manifest: it chooses ONE execution
+form (batch by default, serial / fully-parallel only when the DAG
+degenerates) and expresses it as a mermaid DAG.
 
 ### `execute` — Implement the DAG
 
 Call with `plan` (path to a `tasks.md` manifest). Dispatches an
 **orchestrator subagent** that drives every task level by level —
 same-level tasks in parallel. Requires `delegation.max_spawn_depth >= 2`
-in the Hermes config. The orchestrator does NOT commit: the diff is left
+in the Hermes config (auto-configured by `hermes jovaltus setup` /
+`update`). The orchestrator does NOT commit: the diff is left
 for simplify/review.
 
 ### `simplify` — Simplify the Changes
@@ -112,6 +114,8 @@ Setup 會：
 2. 安裝 bundled skills 到 global skills 目錄
 3. 寫入 SOUL.md（可選，預設 yes）
 4. 記錄安裝狀態至 `~/.hermes/jovaltus_state.json`
+5. 確保每個已安裝 profile 的 `delegation.max_spawn_depth >= 2`
+   （`execute` pipeline 需要；`hermes jovaltus update` 也會執行同樣設定）
 
 ### Step 3: 啟用 Plugin
 
@@ -197,7 +201,7 @@ hermes -p jovaltus-agent
 | `No inference provider configured` | Profile config 缺少 model 設定。參考 Step 4 補上 |
 | 401 Authentication Error | 確認 profile 的 `.env` 有 API key |
 | `Unknown command: jovaltus` | Plugin 未啟用。執行 `hermes plugins enable jovaltus` |
-| execute 回傳 `max_spawn_depth` 錯誤 | 設定 `hermes config set delegation.max_spawn_depth 2` |
+| execute 回傳 `max_spawn_depth` 錯誤 | 執行 `hermes jovaltus setup` 或 `update`（會自動設定），或手動 `hermes config set delegation.max_spawn_depth 2` |
 
 ---
 
@@ -213,10 +217,13 @@ Jovaltus v1.0.0 is a deterministic framework, not a skill bundle. The plugin:
    `ctx.register_tool` — each handler starts a pipeline and dispatches the
    first-phase subagent
 4. **Registers 3 hooks** via `ctx.register_hook` — `subagent_start`
-   associates children, `subagent_stop` advances the chain, `pre_llm_call`
+   associates children, `subagent_stop` advances the chain and pushes a
+   completion notification when the pipeline finishes, `pre_llm_call`
    injects status
 5. **Persists pipeline state** to `~/.hermes/jovaltus_state.json` under the
    `"pipeline"` key (fabricium-managed; the `"profiles"` key is untouched)
+6. **Auto-configures `delegation.max_spawn_depth >= 2`** on `setup` and
+   `update` (`setup_config.py`), so `execute` works out of the box
 
 The main agent calls tools and reads status; the state machine + hooks
 decide the flow.
@@ -242,12 +249,13 @@ jovaltus/
 ├── CHANGELOG.md
 ├── pyproject.toml
 ├── src/jovaltus/
-│   ├── __init__.py          # register(): fabricium + 4 tools + 3 hooks (67 lines)
+│   ├── __init__.py          # register(): fabricium + 4 tools + 3 hooks + setup/update auto-config (107 lines)
 │   ├── state.py             # Deterministic state machine + JSON persistence
-│   ├── tools.py             # 4 tool handlers + CHAIN + dispatch_pipeline_step
-│   ├── hooks.py             # subagent_start / subagent_stop / pre_llm_call
+│   ├── tools.py             # 4 tool handlers + CHAIN + dispatch_pipeline_step + routing capture
+│   ├── hooks.py             # subagent_start / subagent_stop / pre_llm_call + completion notification
+│   ├── setup_config.py      # Text-based YAML edit: ensure delegation.max_spawn_depth >= 2
 │   ├── prompts/             # 9 subagent goal prompts (prd, research, acceptance, tasks, execute, simplify-review, simplify-fix, review, review-fix)
-│   ├── plugin.yaml          # Plugin metadata (version 1.0.0)
+│   ├── plugin.yaml          # Plugin metadata (version 1.1.1)
 │   ├── SOUL.md              # Agent identity
 │   └── skills/              # 5 bundled utility skills
 │       ├── agentic-debugging/
@@ -256,12 +264,13 @@ jovaltus/
 │       ├── project-documentation/
 │       └── qa/
 ├── tests/
-│   ├── test_state.py        # 24 tests
-│   ├── test_tools.py        # 18 tests
-│   ├── test_hooks.py        # 17 tests
+│   ├── test_state.py        # 25 tests
+│   ├── test_tools.py        # 23 tests
+│   ├── test_hooks.py        # 23 tests
 │   ├── test_register.py     # 5 tests
 │   ├── test_git_utils.py    # 19 tests
 │   ├── test_sync.py         # 8 tests
+│   ├── test_setup_config.py # 12 tests
 │   └── integration/
 │       └── test_cli.py      # 8 tests
 └── docs/                    # Project documentation

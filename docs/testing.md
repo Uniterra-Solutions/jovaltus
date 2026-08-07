@@ -15,7 +15,7 @@ Test framework, commands, conventions, and layout.
 ## Commands
 
 ```bash
-uv run pytest -v                          # Full suite (102 tests)
+uv run pytest -v                          # Full suite (123 tests)
 uv run pytest -v tests/test_state.py      # Single file
 uv run pytest -v -k "test_verdict"        # Single test
 uv run pytest -v --ignore=tests/integration  # Unit tests only (no Docker CLI tests)
@@ -27,12 +27,13 @@ uv run pytest -v --ignore=tests/integration  # Unit tests only (no Docker CLI te
 tests/
 ├── conftest.py              # Shared fixtures (git_repo, clear_task_state)
 ├── __init__.py
-├── test_state.py            # 24 tests — state machine transitions + cross-session resume
-├── test_tools.py            # 18 tests — 4 tool handlers + dispatch
-├── test_hooks.py            # 17 tests — hook callbacks + chain advancement
+├── test_state.py            # 25 tests — state machine transitions + cross-session resume
+├── test_tools.py            # 23 tests — 4 tool handlers + dispatch
+├── test_hooks.py            # 23 tests — hook callbacks + chain advancement + completion notification
 ├── test_register.py         # 5 tests — registration wiring (4 tools + 3 hooks)
 ├── test_git_utils.py        # 19 tests — git operations via fabricium
 ├── test_sync.py             # 8 tests — state persistence + skill sync
+├── test_setup_config.py     # 12 tests — YAML editor + HermesPlugin auto-config wiring
 └── integration/
     ├── conftest.py          # Integration fixtures
     └── test_cli.py          # 8 tests — CLI (setup, status, update)

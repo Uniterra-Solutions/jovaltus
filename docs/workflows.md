@@ -53,10 +53,13 @@ must have `delegation.max_spawn_depth >= 2` (the execute orchestrator is a
 depth-1 child that spawns its own workers). The handler checks the
 effective value and returns
 `{"status":"error","message":"execute requires delegation.max_spawn_depth >= 2"}`
-otherwise (`src/jovaltus/tools.py:237-248`, `351-366`).
+otherwise (`src/jovaltus/tools.py:395-407`, `519-569`). `hermes jovaltus
+setup` and `hermes jovaltus update` auto-configure the floor for installed
+profiles (`src/jovaltus/setup_config.py`), so the manual step below is only
+needed for profiles outside the plugin's setup/update flow:
 
 ```bash
-# set once in the Hermes config (the plugin never edits it for you)
+# set once in the Hermes config if setup/update did not run
 hermes config set delegation.max_spawn_depth 2
 ```
 

@@ -45,6 +45,9 @@ Interactive prompts (TTY detected):
 - Installs bundled skills to global skills directory
 - Optionally writes `SOUL.md` to profile directory
 - Persists installation state to `~/.hermes/jovaltus_state.json`
+- Ensures `delegation.max_spawn_depth >= 2` in each installed profile's
+  config (the `execute` pipeline needs depth ≥ 2 for its orchestrator; the
+  same auto-config runs on `hermes jovaltus update`)
 
 Non-TTY fallback: safe defaults, no SOUL.md overwrite.
 
@@ -73,7 +76,7 @@ pre-commit install            # Git hooks: ruff check → mypy → ruff format
 ## Run Tests
 
 ```bash
-uv run pytest -v              # 102 tests
+uv run pytest -v              # 123 tests
 ```
 
 ## Lint & Type Check
