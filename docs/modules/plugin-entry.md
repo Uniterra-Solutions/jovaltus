@@ -109,7 +109,7 @@ terminal-state completion notification at `hooks.py:217-272`
 
 ```yaml
 name: jovaltus
-version: 1.1.4
+version: 1.1.5
 description: "Jovaltus Agent Mode — subagent-driven development framework: plan / execute / simplify / review tools, state machine, and hooks"
 author: LaiTszKin
 ```
