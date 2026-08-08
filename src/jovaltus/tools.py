@@ -30,34 +30,49 @@ logger = logging.getLogger(__name__)
 # Captured at register() time — the registry invokes handlers without ctx.
 _CTX: Any = None
 
-# The host parent agent, resolved lazily and cached across dispatch calls.
-# subagent_lifecycle resolves the parent from a contextvar that Hermes binds
-# only around a main-agent turn; subagent_stop hook callbacks run on the
-# child's daemon thread where that contextvar is NOT visible. Caching the
-# parent on first dispatch (always a main turn) lets later hook-driven
-# dispatches succeed with the same parent.
+# The host parent agent per originating session, resolved lazily and cached
+# across dispatch calls. subagent_lifecycle resolves the parent from a
+# contextvar that Hermes binds only around a main-agent turn; subagent_stop /
+# post_llm_call hook callbacks run on child daemon threads where that
+# contextvar is NOT visible. Keying the cache by the parent's session_id
+# (instead of a single process-global slot) means a hook-driven re-dispatch
+# re-attaches to the session that OWNS the pipeline — not whichever session
+# happened to dispatch last — so the subagent's progress events (and the
+# desktop subagent rows they drive) land in the right session's chat.
+_PARENT_AGENTS: dict[str, Any] = {}
+# Last-resort fallback for pipelines whose session never went through a
+# main-turn dispatch (e.g. legacy state resumed without new captures).
 _PARENT_AGENT: Any = None
-_LIFECYCLE: Any = None
 
-# Routing metadata for completion notifications: snapshotted on the first
+# Routing metadata for completion notifications. Captured per-run on the
 # main-turn dispatch (where the contextvar parent and session env are bound)
-# so hook-driven notifications — which fire on child daemon threads where
-# those contextvars are NOT visible — still land in the session that started
-# the pipeline. Mirrors the process_registry completion-event contract.
-_ROUTING: dict[str, str] = {"session_key": "", "origin_ui_session_id": ""}
+# and PERSISTED on the pipeline (state.PipelineState.session_key /
+# origin_ui_session_id), so hook-driven notifications — which fire on child
+# daemon threads where those contextvars are NOT visible — still land in the
+# session that started the pipeline even when other parallel sessions run
+# their own pipelines in the same gateway process. Mirrors the
+# process_registry completion-event contract; see _capture_routing.
 
 
-def _get_parent_agent() -> Any:
-    """Return the host parent, preferring the live contextvar, else cached."""
+def _get_parent_agent(session_key: str = "") -> Any:
+    """Return the host parent for *session_key*'s pipeline.
+
+    On a main-agent turn the contextvar parent is live (via
+    :func:`_live_parent`): record it in the per-session cache and return it.
+    On a hook's daemon thread the contextvar is invisible, so resolve by the
+    pipeline's OWN session key — never the last session that happened to
+    dispatch.
+    """
     global _PARENT_AGENT
-    try:
-        from agent.subagent_lifecycle import get_active_subagent_parent
-
-        live = get_active_subagent_parent()
-        if live is not None:
-            _PARENT_AGENT = live
-    except Exception:  # noqa: BLE001 — fall back to cache
-        pass
+    live = _live_parent()
+    if live is not None:
+        _PARENT_AGENT = live
+        sid = getattr(live, "session_id", None)
+        if sid:
+            _PARENT_AGENTS[str(sid)] = live
+        return live
+    if session_key and session_key in _PARENT_AGENTS:
+        return _PARENT_AGENTS[session_key]
     return _PARENT_AGENT
 
 
@@ -76,14 +91,24 @@ def _live_parent() -> Any:
         return None
 
 
-def _capture_routing() -> None:
-    """Snapshot the originating session's routing metadata (main turn only)."""
+def _capture_routing() -> dict[str, str]:
+    """Capture the originating session's routing metadata (main turn only).
+
+    Returns ``{"session_key": <agent session_id>, "origin_ui_session_id":
+    <UI tab id>}`` — empty strings on a daemon thread or outside a Hermes
+    runtime. Also records the parent agent in the per-session cache so
+    hook-driven re-dispatches can resolve the right parent. The returned
+    dict is persisted on the pipeline by the tool handlers, making each
+    run's notifications addressable to the session that started it.
+    """
+    routing: dict[str, str] = {"session_key": "", "origin_ui_session_id": ""}
     parent = _live_parent()
     if parent is None:
-        return
+        return routing
     session_id = getattr(parent, "session_id", None)
     if session_id:
-        _ROUTING["session_key"] = str(session_id)
+        routing["session_key"] = str(session_id)
+        _PARENT_AGENTS[str(session_id)] = parent
     try:
         from gateway.session_context import get_session_env
 
@@ -91,23 +116,23 @@ def _capture_routing() -> None:
     except Exception:  # noqa: BLE001 — CI / non-gateway fallback
         ui_session = os.environ.get("HERMES_UI_SESSION_ID", "")
     if ui_session:
-        _ROUTING["origin_ui_session_id"] = str(ui_session)
+        routing["origin_ui_session_id"] = str(ui_session)
+    return routing
 
 
-def _get_lifecycle() -> Any:
+def _get_lifecycle(session_key: str = "") -> Any:
     """A SubagentLifecycleService whose parent resolver falls back to cache.
 
     ``ctx.subagent_lifecycle`` is the official entry point, but its resolver
     only reads the turn-bound contextvar — unavailable on the daemon thread
-    where ``subagent_stop`` fires. Rebuilding the same public service with
-    our resolver keeps the launch/handle/hook contract identical.
+    where ``subagent_stop`` / ``post_llm_call`` fire. Rebuilding the same
+    public service with a resolver bound to the pipeline's session keeps the
+    launch/handle/hook contract identical while re-attaching hook-driven
+    dispatches to the owning session.
     """
-    global _LIFECYCLE
-    if _LIFECYCLE is None:
-        from agent.subagent_lifecycle import SubagentLifecycleService
+    from agent.subagent_lifecycle import SubagentLifecycleService
 
-        _LIFECYCLE = SubagentLifecycleService(_get_parent_agent)
-    return _LIFECYCLE
+    return SubagentLifecycleService(lambda: _get_parent_agent(session_key))
 
 
 _TOOLSET = "jovaltus"
@@ -277,7 +302,7 @@ def dispatch_pipeline_step(p: jstate.PipelineState, phase: str) -> dict[str, Any
         # v0.20.0 ("Hermes delegates use isolated task environments") — the
         # repo root travels inside the context text instead (Contract §5).
         request = _get_launch_request(goal, context, role)
-        handle = _get_lifecycle().launch(request)
+        handle = _get_lifecycle(p.session_key).launch(request)
     except Exception as exc:  # noqa: BLE001 — surface any launch failure
         logger.exception("subagent_lifecycle launch failed for phase %s", phase)
         return {
@@ -390,7 +415,13 @@ def plan_handler(args: dict[str, Any], **kwargs: Any) -> str:
         run_dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         return _error_result(f"cannot create run directory {run_dir}: {exc}")
-    p = jstate.start_pipeline("plan", str(run_dir), user_requirements=requirements)
+    routing = _capture_routing()
+    p = jstate.start_pipeline(
+        "plan",
+        str(run_dir),
+        user_requirements=requirements,
+        **routing,
+    )
     return _dispatch_first(p, "plan", "prd")
 
 
@@ -404,7 +435,10 @@ def execute_handler(args: dict[str, Any], **kwargs: Any) -> str:
     if _read_max_spawn_depth() < 2:
         return _error_result("execute requires delegation.max_spawn_depth >= 2")
     resolved = str(Path(plan_path).resolve())
-    p = jstate.start_pipeline("execute", str(Path(resolved).parent), plan_path=resolved)
+    routing = _capture_routing()
+    p = jstate.start_pipeline(
+        "execute", str(Path(resolved).parent), plan_path=resolved, **routing
+    )
     return _dispatch_first(p, "execute", "execute")
 
 
@@ -416,8 +450,9 @@ def simplify_handler(args: dict[str, Any], **kwargs: Any) -> str:
     if not Path(plan_path).exists():
         return _error_result(f"plan path does not exist: {plan_path}")
     resolved = str(Path(plan_path).resolve())
+    routing = _capture_routing()
     p = jstate.start_pipeline(
-        "simplify", str(Path(resolved).parent), plan_path=resolved
+        "simplify", str(Path(resolved).parent), plan_path=resolved, **routing
     )
     return _dispatch_first(p, "simplify", "simplify")
 
@@ -430,15 +465,21 @@ def review_handler(args: dict[str, Any], **kwargs: Any) -> str:
     if not Path(plan_path).exists():
         return _error_result(f"plan path does not exist: {plan_path}")
     resolved = str(Path(plan_path).resolve())
-    p = jstate.start_pipeline("review", str(Path(resolved).parent), plan_path=resolved)
+    routing = _capture_routing()
+    p = jstate.start_pipeline(
+        "review", str(Path(resolved).parent), plan_path=resolved, **routing
+    )
     return _dispatch_first(p, "review", "review")
 
 
 def _dispatch_first(p: jstate.PipelineState, tool: str, first_phase: str) -> str:
-    """Dispatch the first phase and return the §1 started/error JSON."""
-    # Handlers run on the main turn — snapshot routing before any child
-    # launches so completion notifications target the originating session.
-    _capture_routing()
+    """Dispatch the first phase and return the §1 started/error JSON.
+
+    Routing metadata was captured by the handler before ``start_pipeline``
+    and persisted on *p*, so every later notification targets the session
+    that started this run — never a global snapshot that parallel sessions
+    could have clobbered.
+    """
     try:
         result = dispatch_pipeline_step(p, first_phase)
     except Exception as exc:  # noqa: BLE001 — surface any dispatch failure

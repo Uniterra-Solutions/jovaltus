@@ -72,6 +72,15 @@ class PipelineState:
     makes cross-session resume possible: the whole dataclass is serialized
     to JSON under the ``"pipeline"`` key and re-read from disk on every
     :func:`get_pipeline` call.
+
+    ``session_key`` / ``origin_ui_session_id`` are the routing identity of
+    the session that STARTED the pipeline, captured on the main-turn
+    dispatch and persisted with the run. Completion/fix-request
+    notifications are addressed with these so they land in the originating
+    session's poller even when other parallel sessions run pipelines in the
+    same gateway process (see tools._capture_routing / hooks event
+    builders). Legacy pipelines persisted before v1.1.5 carry empty values
+    and their notifications fall back to ownerless delivery.
     """
 
     run_dir: str  # abs path to <repo_root>/.plan/<YYYYmmdd>/<plan_name>/
@@ -85,6 +94,8 @@ class PipelineState:
     verdict: str | None  # "pass" | "fix" | None
     updated_at: str  # ISO timestamp
     error: str | None
+    session_key: str = ""  # originating agent session_id (notification routing)
+    origin_ui_session_id: str = ""  # originating UI tab/window id (routing)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize losslessly to a JSON-encodable dict."""
@@ -105,6 +116,8 @@ class PipelineState:
             verdict=_optional_str(data.get("verdict")),
             updated_at=str(data["updated_at"]),
             error=_optional_str(data.get("error")),
+            session_key=str(data.get("session_key") or ""),
+            origin_ui_session_id=str(data.get("origin_ui_session_id") or ""),
         )
 
 
@@ -170,11 +183,16 @@ def start_pipeline(
     run_dir: str,
     user_requirements: str = "",
     plan_path: str | None = None,
+    session_key: str = "",
+    origin_ui_session_id: str = "",
 ) -> PipelineState:
     """Start (or overwrite) a pipeline run for *tool*.
 
     The new pipeline begins in the tool's first phase with status
-    "running".
+    "running".  *session_key* / *origin_ui_session_id* pin the run to the
+    session that commissioned it so terminal notifications are routed back
+    to that session's poller (captured by the tool handlers on the main
+    turn; see :func:`jovaltus.tools._capture_routing`).
     """
     if tool not in _FIRST_PHASE:
         raise ValueError(f"unknown pipeline tool: {tool!r}")
@@ -190,6 +208,8 @@ def start_pipeline(
         verdict=None,
         updated_at=_now(),
         error=None,
+        session_key=session_key,
+        origin_ui_session_id=origin_ui_session_id,
     )
     _persist(p)
     return p

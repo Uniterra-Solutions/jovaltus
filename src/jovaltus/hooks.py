@@ -52,6 +52,10 @@ def on_subagent_start(**kwargs: Any) -> None:
     A child whose goal contains ``[jovaltus-pipeline:<tool>:<phase>]``
     matching the current pipeline's expected phase is recorded as the active
     child. No marker match → no-op.
+
+    Session gating: a pipeline pinned to a session (``p.session_key``) only
+    accepts children spawned by that session's parent. Legacy pipelines
+    without routing are ungated.
     """
     try:
         child_session_id = kwargs.get("child_session_id")
@@ -64,6 +68,9 @@ def on_subagent_start(**kwargs: Any) -> None:
         p = jstate.get_pipeline()
         if p is None or p.tool != tool or p.phase != phase:
             return
+        parent_session_id = str(kwargs.get("parent_session_id") or "")
+        if p.session_key and parent_session_id != p.session_key:
+            return  # child of a DIFFERENT session's pipeline — never touch this one
         jstate.register_child(p, str(child_session_id))
     except Exception:  # noqa: BLE001 — a bad hook must not break the loop
         logger.exception("Jovaltus subagent_start hook failed")
@@ -83,6 +90,9 @@ def on_subagent_stop(**kwargs: Any) -> None:
         p = jstate.get_pipeline()
         if p is None:
             return
+        parent_session_id = str(kwargs.get("parent_session_id") or "")
+        if p.session_key and parent_session_id != p.session_key:
+            return  # a different session's child — this pipeline is untouched
         status = str(kwargs.get("child_status") or "completed")
         summary = str(kwargs.get("child_summary") or "")
         if not jstate.complete_child(p, str(child_session_id), status, summary):
@@ -117,7 +127,8 @@ def on_post_llm_call(**kwargs: Any) -> None:
     Fires once per completed agent turn (turn_finalizer.py:573). Acts only
     when the pipeline is parked in a ``*_waiting`` phase (the reviewer
     verdict was "fix" and the main agent was woken to fix) AND the completed
-    turn belongs to the main agent — not a subagent. All other states are
+    turn belongs to the main agent of the session that owns the pipeline —
+    not a subagent and not another session's turn. All other states are
     no-ops, so the hook is effectively absent before the pipeline starts
     and after it ends.
     """
@@ -129,6 +140,8 @@ def on_post_llm_call(**kwargs: Any) -> None:
             return
         if str(kwargs.get("platform")) == "subagent":
             return  # subagent turns must not trigger the next review
+        if p.session_key and str(kwargs.get("session_id") or "") != p.session_key:
+            return  # another session's turn must not re-dispatch THIS pipeline
         next_phase = CHAIN[p.tool][p.phase]
         if next_phase == "done":
             _finish_done(p)
@@ -214,15 +227,17 @@ def _finish_failed(p: jstate.PipelineState, error: str) -> None:
     _push_completion_event(p, False)
 
 
-def _build_completion_event(
-    p: jstate.PipelineState, ok: bool, routing: dict[str, str]
-) -> dict[str, Any]:
+def _build_completion_event(p: jstate.PipelineState, ok: bool) -> dict[str, Any]:
     """Completion event for the process_registry completion_queue.
 
     The queue is polled by the desktop/TUI, CLI, and gateway surfaces while
     the agent is idle; each drains a completion into a status update + a new
     agent turn, so the main agent learns the pipeline finished without
     waiting for the user's next message.
+
+    Routing comes from the pipeline itself (captured at start and persisted
+    on the run), so the event is addressed to the session that started it —
+    even when other parallel sessions run pipelines in the same process.
     """
     evt: dict[str, Any] = {
         "type": "completion",
@@ -232,10 +247,10 @@ def _build_completion_event(
         "completion_reason": "completed" if ok else "failed",
         "output": jstate.status_text(p),
     }
-    if routing.get("session_key"):
-        evt["session_key"] = routing["session_key"]
-    if routing.get("origin_ui_session_id"):
-        evt["origin_ui_session_id"] = routing["origin_ui_session_id"]
+    if p.session_key:
+        evt["session_key"] = p.session_key
+    if p.origin_ui_session_id:
+        evt["origin_ui_session_id"] = p.origin_ui_session_id
     return evt
 
 
@@ -251,21 +266,18 @@ def _push_completion_event(p: jstate.PipelineState, ok: bool) -> None:
     except Exception:  # noqa: BLE001 — no Hermes runtime (CI)
         return
     try:
-        from jovaltus.tools import _ROUTING
-
-        process_registry.completion_queue.put(_build_completion_event(p, ok, _ROUTING))
+        process_registry.completion_queue.put(_build_completion_event(p, ok))
     except Exception:  # noqa: BLE001 — a bad notification must not break the loop
         logger.debug("Jovaltus completion notification failed", exc_info=True)
 
 
-def _build_fix_request_event(
-    p: jstate.PipelineState, routing: dict[str, str]
-) -> dict[str, Any]:
+def _build_fix_request_event(p: jstate.PipelineState) -> dict[str, Any]:
     """Fix-request wake-up event for the main agent.
 
     The host dedups completions on ``(type, session_id)``, so the session id
     carries ``loop_iteration``: each loop round gets a distinct identity and
-    later fix requests are never swallowed.
+    later fix requests are never swallowed. Routing mirrors
+    :func:`_build_completion_event` — the pipeline's own session.
     """
     findings = _read_findings(p)
     session_id = f"jovaltus-{p.tool}-{Path(p.run_dir).name}-fix-{p.loop_iteration}"
@@ -281,10 +293,10 @@ def _build_fix_request_event(
             f"re-runs automatically after this turn.\n\n{findings}".strip()
         ),
     }
-    if routing.get("session_key"):
-        evt["session_key"] = routing["session_key"]
-    if routing.get("origin_ui_session_id"):
-        evt["origin_ui_session_id"] = routing["origin_ui_session_id"]
+    if p.session_key:
+        evt["session_key"] = p.session_key
+    if p.origin_ui_session_id:
+        evt["origin_ui_session_id"] = p.origin_ui_session_id
     return evt
 
 
@@ -302,9 +314,7 @@ def _push_fix_request_event(p: jstate.PipelineState) -> None:
     except Exception:  # noqa: BLE001 — no Hermes runtime (CI)
         return
     try:
-        from jovaltus.tools import _ROUTING
-
-        process_registry.completion_queue.put(_build_fix_request_event(p, _ROUTING))
+        process_registry.completion_queue.put(_build_fix_request_event(p))
     except Exception:  # noqa: BLE001 — a bad notification must not break the loop
         logger.debug("Jovaltus fix-request notification failed", exc_info=True)
 
