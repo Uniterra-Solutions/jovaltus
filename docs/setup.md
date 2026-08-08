@@ -76,7 +76,7 @@ pre-commit install            # Git hooks: ruff check → mypy → ruff format
 ## Run Tests
 
 ```bash
-uv run pytest -v              # 123 tests
+uv run pytest -v              # 131 tests
 ```
 
 ## Lint & Type Check

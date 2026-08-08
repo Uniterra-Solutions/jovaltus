@@ -3,8 +3,8 @@
 Jovaltus is a Hermes plugin that implements a **subagent-driven
 deterministic development framework**: 4 tools (`plan`, `execute`,
 `simplify`, `review`) dispatch isolated subagents, a plugin-owned state
-machine drives phase transitions, 3 hooks (`subagent_start`,
-`subagent_stop`, `pre_llm_call`) wire subagent lifecycle to the state
+machine drives phase transitions, 4 hooks (`subagent_start`,
+`subagent_stop`, `pre_llm_call`, `post_llm_call`) wire subagent lifecycle to the state
 machine and inject pipeline status every turn — plus 5 bundled utility
 skills (`agentic-debugging`, `manage-agents-md`, `manage-git-repo`,
 `project-documentation`, `qa`).

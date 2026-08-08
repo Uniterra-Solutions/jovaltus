@@ -72,26 +72,35 @@ in the working tree for simplify/review (`src/jovaltus/prompts/execute.md`).
 Call the `simplify` tool with `plan` = path to the plan directory (the
 handler resolves the parent of the manifest). It dispatches a
 simplification-review subagent; if the reviewer writes
-`verdict.json` `{"verdict":"fix",...}`, a fixer subagent applies the
-suggestions and the reviewer re-runs. Loop until the verdict is `"pass"`
-(no iteration cap — `src/jovaltus/hooks.py:110-132`).
+`verdict.json` `{"verdict":"fix",...}`, the pipeline parks in
+`simplify_waiting` and **you (the main agent) apply the suggestions**
+— no fixer subagent is dispatched. When your fixing turn ends, the
+`post_llm_call` hook re-dispatches the reviewer automatically. Loop until
+the verdict is `"pass"` (no iteration cap — `src/jovaltus/hooks.py:146-188`).
 
 ### 4. `review` — adversarially review the changes
 
 Call the `review` tool with `plan` = path to the plan directory. Same loop
 shape as simplify, but the reviewer tries to BREAK the changes (bugs,
-assumptions, edge cases) instead of seeking simplification.
+assumptions, edge cases) instead of seeking simplification. A `"fix"`
+verdict parks in `review_waiting`; you fix, and `post_llm_call`
+re-dispatches the reviewer.
 
 ### Loop mechanics (shared)
 
 - Every dispatched child's goal carries the marker
   `[jovaltus-pipeline:<tool>:<phase>]`; `subagent_start` associates the
-  child with the pipeline (`src/jovaltus/hooks.py:42-63`).
+  child with the pipeline (`src/jovaltus/hooks.py:44-64`).
 - `subagent_stop` advances the chain when the active child completes
-  (`src/jovaltus/hooks.py:65-88`).
+  (`src/jovaltus/hooks.py:67-90`). A `"fix"` verdict parks the pipeline and
+  pushes a fix-request event (`_push_fix_request_event`,
+  `src/jovaltus/hooks.py:287-305`) that wakes you with the findings.
 - `pre_llm_call` injects a status line each turn while a pipeline exists
-  (`src/jovaltus/hooks.py:91-104`), so you always see the current
+  (`src/jovaltus/hooks.py:93-106`), so you always see the current
   tool/phase/status/run_dir.
+- `post_llm_call` re-dispatches the reviewer after your fixing turn ends
+  (`src/jovaltus/hooks.py:109-143`). It is a no-op unless the pipeline is
+  parked in `*_waiting`, so it does not fire outside the loop.
 
 ## Running Tests During Development
 

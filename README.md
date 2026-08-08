@@ -3,7 +3,7 @@
 > **Jovaltus** is a Hermes plugin that implements a deterministic,
 > subagent-driven development framework: 4 tools (`plan`, `execute`,
 > `simplify`, `review`) dispatch isolated subagents through a plugin-owned
-> state machine, and 3 hooks drive phase transitions automatically and
+> state machine, and 4 hooks drive phase transitions automatically and
 > inject pipeline status every turn. It also bundles 5 utility skills.
 
 ---
@@ -22,9 +22,10 @@ v1.0.0 rearchitected Jovaltus from a skill-bundle approach into a
 handlers dispatch pipeline subagents via Hermes's `subagent_lifecycle` (resolved from the
 main-agent turn and cached for hook-driven continuation);
 a state machine (`state.py`, persisted to `~/.hermes/jovaltus_state.json`)
-records every phase transition (cross-session resume); and 3 hooks
-(`subagent_start`, `subagent_stop`, `pre_llm_call`) associate children,
-advance the chain, and inject a status line into every turn.
+records every phase transition (cross-session resume); and 4 hooks
+(`subagent_start`, `subagent_stop`, `pre_llm_call`, `post_llm_call`)
+associate children, advance the chain, inject a status line into every
+turn, and re-dispatch the reviewer after the main agent's fixing turn.
 
 ```
 plan → execute → simplify → review
@@ -60,9 +61,11 @@ for simplify/review.
 
 ### `simplify` — Simplify the Changes
 
-Call with `plan`. Dispatches a simplification-review subagent, then a
-fixer, looping until the reviewer writes `verdict.json` with `"pass"`.
-No iteration cap.
+Call with `plan`. Dispatches a simplification-review subagent. A `"fix"`
+verdict parks the pipeline in `simplify_waiting` and wakes you (the main
+agent) to apply the suggestions — no fixer subagent is dispatched; when
+your fixing turn ends, `post_llm_call` re-dispatches the reviewer. Loop
+until the reviewer writes `verdict.json` with `"pass"`. No iteration cap.
 
 ### `review` — Adversarially Review the Changes
 
@@ -71,8 +74,10 @@ changes (bugs, assumptions, edge cases) instead of seeking simplification.
 
 Every dispatched child's goal carries the marker
 `[jovaltus-pipeline:<tool>:<phase>]`; `subagent_stop` advances the chain,
-and `pre_llm_call` injects `[Jovaltus pipeline] tool=... phase=...
-status=... run_dir=...` each turn while a pipeline exists.
+`pre_llm_call` injects `[Jovaltus pipeline] tool=... phase=...
+status=... run_dir=...` each turn while a pipeline exists, and
+`post_llm_call` re-dispatches the reviewer after a `*_waiting` fixing
+turn ends.
 
 ---
 
@@ -216,10 +221,11 @@ Jovaltus v1.0.0 is a deterministic framework, not a skill bundle. The plugin:
 3. **Registers 4 tools** (`plan`, `execute`, `simplify`, `review`) via
    `ctx.register_tool` — each handler starts a pipeline and dispatches the
    first-phase subagent
-4. **Registers 3 hooks** via `ctx.register_hook` — `subagent_start`
+4. **Registers 4 hooks** via `ctx.register_hook` — `subagent_start`
    associates children, `subagent_stop` advances the chain and pushes a
    completion notification when the pipeline finishes, `pre_llm_call`
-   injects status
+   injects status, `post_llm_call` re-dispatches the reviewer after the
+   main agent's fixing turn
 5. **Persists pipeline state** to `~/.hermes/jovaltus_state.json` under the
    `"pipeline"` key (fabricium-managed; the `"profiles"` key is untouched)
 6. **Auto-configures `delegation.max_spawn_depth >= 2`** on `setup` and
@@ -232,7 +238,7 @@ decide the flow.
 
 | Old (v0.6.0 skill bundle) | New (v1.0.0 framework) |
 |---------------|---------------|
-| Bundled skills guide the orchestrator phase by phase | 4 tools + state machine + 3 hooks drive the pipeline |
+| Bundled skills guide the orchestrator phase by phase | 4 tools + state machine + 4 hooks drive the pipeline |
 | Orchestrator navigates skills phase by phase | Deterministic chains: plan (prd→research→acceptance→tasks→done), execute, simplify/review verdict loops |
 | No plugin tools, no state machine | 4 tools registered on ctx; `PipelineState` persisted to JSON |
 | Behavior in skill documents | Behavior in `prompts/*.md` goal documents + `state.py` + `hooks.py` |
@@ -249,12 +255,12 @@ jovaltus/
 ├── CHANGELOG.md
 ├── pyproject.toml
 ├── src/jovaltus/
-│   ├── __init__.py          # register(): fabricium + 4 tools + 3 hooks + setup/update auto-config (107 lines)
+│   ├── __init__.py          # register(): fabricium + 4 tools + 4 hooks + setup/update auto-config (107 lines)
 │   ├── state.py             # Deterministic state machine + JSON persistence
 │   ├── tools.py             # 4 tool handlers + CHAIN + dispatch_pipeline_step + routing capture
-│   ├── hooks.py             # subagent_start / subagent_stop / pre_llm_call + completion notification
+│   ├── hooks.py             # subagent_start / subagent_stop / pre_llm_call / post_llm_call + completion notification
 │   ├── setup_config.py      # Text-based YAML edit: ensure delegation.max_spawn_depth >= 2
-│   ├── prompts/             # 9 subagent goal prompts (prd, research, acceptance, tasks, execute, simplify-review, simplify-fix, review, review-fix)
+│   ├── prompts/             # 7 subagent goal prompts (prd, research, acceptance, tasks, execute, simplify-review, review)
 │   ├── plugin.yaml          # Plugin metadata (version 1.1.1)
 │   ├── SOUL.md              # Agent identity
 │   └── skills/              # 5 bundled utility skills

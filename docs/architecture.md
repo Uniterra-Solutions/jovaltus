@@ -5,7 +5,8 @@ development framework**. The plugin ships 4 tools (`plan`, `execute`,
 `simplify`, `review`) whose handlers dispatch isolated subagents via
 Hermes's `subagent_lifecycle`; a plugin-owned state machine
 (`state.py`, JSON-persisted for cross-session resume) records every phase
-transition; and 3 hooks (`subagent_start`, `subagent_stop`, `pre_llm_call`)
+transition; and 4 hooks (`subagent_start`, `subagent_stop`, `pre_llm_call`,
+`post_llm_call`)
 drive the chain forward deterministically and inject pipeline status into
 the main agent's context every turn. The main agent does NOT decide pipeline
 flow — it calls tools and reads status.
@@ -92,8 +93,9 @@ auto-discovery from `src/jovaltus/skills/`.
   `get_pipeline` / `start_pipeline` / `set_phase` / `register_child` /
   `complete_child` / `set_verdict` / `finish_pipeline` / `status_text` /
   `reset_pipeline`.
-- **3 hooks** (`src/jovaltus/hooks.py`): `on_subagent_start` (42-63),
-  `on_subagent_stop` (65-88), `on_pre_llm_call` (91-104).
+- **4 hooks** (`src/jovaltus/hooks.py`): `on_subagent_start` (44-64),
+  `on_subagent_stop` (67-90), `on_pre_llm_call` (93-106),
+  `on_post_llm_call` (109-143).
 
 ## State Machine and Phase Chains
 
@@ -109,11 +111,11 @@ Phase sequences (chain table `CHAIN` in `src/jovaltus/tools.py:57-67`):
 |------|-------|----------|
 | `plan` | prd → research → acceptance → tasks | done (produces `tasks.md` DAG manifest) |
 | `execute` | execute | done |
-| `simplify` | simplify ⇄ simplify_fix (verdict-driven loop) | done on `"pass"` verdict |
-| `review` | review ⇄ review_fix (verdict-driven loop) | done on `"pass"` verdict |
+| `simplify` | simplify ⇄ simplify_waiting (verdict-driven loop) | done on `"pass"` verdict |
+| `review` | review ⇄ review_waiting (verdict-driven loop) | done on `"pass"` verdict |
 
 `PHASES` (`state.py:24-34`): `prd`, `research`, `acceptance`, `tasks`,
-`execute`, `simplify`, `simplify_fix`, `review`, `review_fix`.
+`execute`, `simplify`, `simplify_waiting`, `review`, `review_waiting`.
 
 ### How a chain advances
 
@@ -132,22 +134,33 @@ Phase sequences (chain table `CHAIN` in `src/jovaltus/tools.py:57-67`):
    marker match → no-op (orchestrator grandchildren, foreign children, and
    user-initiated subagents never touch pipeline state).
 3. `subagent_stop` fires when the child completes: `on_subagent_stop`
-   (`hooks.py:65-88`) calls `complete_child` (`state.py:177-194`) — True
+   (`hooks.py:67-90`) calls `complete_child` (`state.py:177-194`) — True
    only for the active child. A non-`"success"` status fails the pipeline
    (`finish_pipeline(ok=False, error=summary)`); otherwise `_advance`
-   (`hooks.py:110-132`) follows the chain:
+   (`hooks.py:146-188`) follows the chain:
    - simplify/review reviewer phases: reads `<run_dir>/verdict.json`
-     (`hooks.py:141-157`); `"pass"` → `set_verdict` + `finish_pipeline(ok=True)`;
-     `"fix"` → increment `loop_iteration`, set verdict, and continue the
-     chain (fixer → reviewer → ...). **No iteration cap.**
+     (`hooks.py:269-284`); `"pass"` → `set_verdict` + `finish_pipeline(ok=True)`;
+     `"fix"` → increment `loop_iteration`, set verdict, park the pipeline in
+     the `*_waiting` phase (`_waiting_phase`, `hooks.py:192-201`) and push a
+     fix-request event (`_push_fix_request_event`, `hooks.py:287-305`) that
+     wakes the main agent with the findings. **No fixer subagent is
+     dispatched** — the main agent performs the fixes (it has no subagent
+     iteration cap and full conversation context). **No iteration cap.**
    - Other phases: `set_phase(next)` (`state.py:161-167`) + dispatch the
      next phase's subagent. `next_phase == "done"` → finish with `ok=True`.
 4. `pre_llm_call` fires before every main-agent turn: `on_pre_llm_call`
-   (`hooks.py:91-104`) returns `{"context": status_text(p)}` when a pipeline
+   (`hooks.py:93-106`) returns `{"context": status_text(p)}` when a pipeline
    exists, else `None` — the status line
    (`[Jovaltus pipeline] tool=... phase=... status=... run_dir=...`,
    `state.py:217-229`) is injected into the user message so the main agent
    always sees pipeline state.
+5. `post_llm_call` fires after every completed agent turn:
+   `on_post_llm_call` (`hooks.py:109-143`) re-dispatches the reviewer when
+   the pipeline is parked in a `*_waiting` phase and the completed turn
+   belongs to the main agent (`platform != "subagent"`). This is how the
+   loop re-runs the review after the main agent finishes fixing — and it is
+   inert once the pipeline is `done`/`failed`, so the hook effectively does
+   not exist outside the loop.
 
 ## Tool Details
 
@@ -194,8 +207,8 @@ repo are available to every pipeline subagent.
 ## Subagent Prompts (`prompts/`)
 
 `src/jovaltus/prompts/` is a Python package (`PROMPT_NAMES`,
-`__init__.py:11-21`; `load_prompt`, `__init__.py:26-41` — raises
-`FileNotFoundError` for unknown names). Each of the 9 Markdown files is the
+`__init__.py:11-19`; `load_prompt`, `__init__.py:24-39` — raises
+`FileNotFoundError` for unknown names). Each of the 7 Markdown files is the
 goal document for one phase's subagent:
 
 | File | Phase | Artifact written to `run_dir` |
@@ -206,9 +219,11 @@ goal document for one phase's subagent:
 | `tasks.md` | tasks | `tasks.md` (task DAG manifest: serial / batch / fully-parallel forms + mermaid DAG) |
 | `execute.md` | execute | none — orchestrator drives the DAG level by level, **no git commits** (diff left for simplify/review) |
 | `simplify-review.md` | simplify | `verdict.json` `{"verdict":"pass"\|"fix","findings":"…"}` |
-| `simplify-fix.md` | simplify_fix | none — applies simplification suggestions |
 | `review.md` | review | `verdict.json` (adversarial review findings) |
-| `review-fix.md` | review_fix | none — fixes defects found by review |
+
+There are no fixer prompts: a `"fix"` verdict parks the pipeline in the
+`*_waiting` phase and the MAIN agent fixes the findings directly (no
+subagent iteration cap); `on_post_llm_call` then re-dispatches the reviewer.
 
 Token substitution is `str.replace` on `[[token]]` (`tools.py:253-263`) —
 never `.format()`, because prompt bodies contain mermaid `{}` braces. Tokens
@@ -240,8 +255,9 @@ navigates them:
 |----------|-----------|--------|
 | Subagent-driven, deterministic framework | Main agent calls tools and reads status; the state machine + hooks decide flow | Active |
 | State machine with JSON persistence | Cross-session resume; deterministic transitions; plugin-owned (`"pipeline"` key, `"profiles"` untouched) | Active |
-| 3 hooks wire subagent lifecycle | `subagent_start` associates, `subagent_stop` advances, `pre_llm_call` injects status | Active |
-| No iteration cap on simplify/review loops | LLMs practically converge; the verdict file is the loop's exit condition | Active |
+| 4 hooks wire subagent lifecycle | `subagent_start` associates, `subagent_stop` advances, `pre_llm_call` injects status, `post_llm_call` re-dispatches the reviewer after the main agent's fixing turn | Active |
+| Main agent fixes, not a fixer subagent | A fixer leaf subagent shares the 50-iteration delegation cap and gets cut off mid-fix on large findings (observed 2026-08-08: 16 iteration-capped rounds); the main agent has no such cap | Active |
+| No iteration cap on simplify/review loops | The verdict file is the loop's exit condition; the main agent fixes until the reviewer passes | Active |
 | `execute` leaves the diff uncommitted | simplify/review operate on the working tree diff, not commits | Active |
 | Fabricium as the only runtime dependency | Avoids duplicating git wrappers, CLI registration, skill bundling, and state persistence | Active |
 | Self-bootstrap fabricium on import | Hermes may recreate its venv, dropping plugin deps; repair on first import | Active |
@@ -275,7 +291,7 @@ bundled skills, and optionally applies `SOUL.md`.
 cat src/jovaltus/__init__.py          # register() flow (Contract §6)
 cat src/jovaltus/state.py             # State machine (PHASES, STATUSES, API)
 cat src/jovaltus/tools.py             # 4 tool handlers + CHAIN + dispatch
-cat src/jovaltus/hooks.py             # 3 hook callbacks
-ls src/jovaltus/prompts/              # 9 subagent goal prompts
+cat src/jovaltus/hooks.py             # 4 hook callbacks
+ls src/jovaltus/prompts/              # 7 subagent goal prompts
 ls src/jovaltus/skills/               # 5 bundled utility skills
 ```

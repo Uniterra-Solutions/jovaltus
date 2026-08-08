@@ -3,9 +3,9 @@
 | Directory | Responsibility | Key Files |
 |-----------|---------------|-----------|
 | `src/jovaltus/` | Plugin source — entry point, tools, hooks, state machine, setup auto-config, prompts | `__init__.py`, `state.py`, `tools.py`, `hooks.py`, `setup_config.py`, `prompts/`, `plugin.yaml`, `SOUL.md` |
-| `src/jovaltus/prompts/` | 9 subagent goal prompts (one per pipeline phase) | `prd.md`, `research.md`, `acceptance.md`, `tasks.md`, `execute.md`, `simplify-review.md`, `simplify-fix.md`, `review.md`, `review-fix.md` |
+| `src/jovaltus/prompts/` | 7 subagent goal prompts (one per dispatched pipeline phase) | `prd.md`, `research.md`, `acceptance.md`, `tasks.md`, `execute.md`, `simplify-review.md`, `review.md` |
 | `src/jovaltus/skills/` | 5 bundled utility Hermes skills | 5 `SKILL.md` files + references/assets/templates |
-| `tests/` | Pytest suite (123 tests) | `conftest.py`, `test_state.py`, `test_tools.py`, `test_hooks.py`, `test_register.py`, `test_git_utils.py`, `test_sync.py`, `test_setup_config.py` |
+| `tests/` | Pytest suite (131 tests) | `conftest.py`, `test_state.py`, `test_tools.py`, `test_hooks.py`, `test_register.py`, `test_git_utils.py`, `test_sync.py`, `test_setup_config.py` |
 | `tests/integration/` | CLI integration tests | `test_cli.py`, `conftest.py` |
 | `.pre-commit-config.yaml` | Pre-commit hooks: ruff check → mypy → ruff format | — |
 | `pyproject.toml` | Project config: deps, build, tooling, entry points | — |
@@ -28,22 +28,22 @@ Hermes calls `jovaltus.register(ctx)` at startup. The plugin:
    (`src/jovaltus/__init__.py:96`)
 4. Registers the 4 pipeline tools via `tools.register(ctx)`
    (`src/jovaltus/__init__.py:101`)
-5. Registers the 3 hooks via `hooks.init(ctx)` + three `ctx.register_hook`
-   calls (`src/jovaltus/__init__.py:102-105`)
+5. Registers the 4 hooks via `hooks.init(ctx)` + four `ctx.register_hook`
+   calls (`src/jovaltus/__init__.py:102-106`)
 
 ## Source Layout
 
 ```
 src/jovaltus/
-├── __init__.py      # register(): fabricium + 4 tools + 3 hooks + setup/update auto-config (107 lines)
+├── __init__.py      # register(): fabricium + 4 tools + 4 hooks + setup/update auto-config (107 lines)
 ├── state.py         # Deterministic state machine + JSON persistence
 ├── tools.py         # 4 tool handlers + CHAIN table + dispatch_pipeline_step + routing capture
-├── hooks.py         # 3 hook callbacks (subagent_start/stop, pre_llm_call) + completion notification
+├── hooks.py         # 4 hook callbacks (subagent_start/stop, pre/post_llm_call) + completion notification
 ├── setup_config.py  # Text-based YAML edit: ensure delegation.max_spawn_depth >= 2 in profile config
-├── prompts/         # 9 subagent goal prompts (Markdown, [[token]] placeholders)
+├── prompts/         # 7 subagent goal prompts (Markdown, [[token]] placeholders)
 │   ├── __init__.py  # PROMPT_NAMES + load_prompt(name)
 │   ├── prd.md  research.md  acceptance.md  tasks.md  execute.md
-│   └── simplify-review.md  simplify-fix.md  review.md  review-fix.md
+│   └── simplify-review.md  review.md
 ├── plugin.yaml      # Plugin metadata (name, version, description)
 ├── SOUL.md          # Agent identity (45 lines)
 └── skills/          # 5 bundled utility skills
@@ -61,8 +61,8 @@ tests/
 ├── conftest.py              # Shared fixtures (git_repo, clear_task_state)
 ├── test_state.py            # 25 tests — state machine transitions + resume + prompts
 ├── test_tools.py            # 23 tests — 4 tool handlers + dispatch + routing capture
-├── test_hooks.py            # 23 tests — hook callbacks + chain advancement + completion notification
-├── test_register.py         # 5 tests — registration wiring (4 tools + 3 hooks)
+├── test_hooks.py            # 31 tests — hook callbacks + chain advancement + completion notification
+├── test_register.py         # 5 tests — registration wiring (4 tools + 4 hooks)
 ├── test_git_utils.py        # 19 tests — git operations via fabricium
 ├── test_sync.py             # 8 tests — state persistence + skill sync
 ├── test_setup_config.py     # 12 tests — YAML editor + HermesPlugin auto-config wiring
@@ -71,7 +71,8 @@ tests/
     └── test_cli.py          # 8 tests — setup, status, update CLI commands
 ```
 
-**123 tests total** (25 + 23 + 23 + 5 + 19 + 8 + 12 + 8). There is no
+**131 tests total** (pytest collects parametrized cases; per-file counts
+are in the Test Layout table above). There is no
 `tests/evals/` directory — the eval harness was removed in v1.0.0;
 behavioral verification is a Phase 7 Docker E2E gate (see
 [testing.md](testing.md)).

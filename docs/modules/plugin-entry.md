@@ -10,7 +10,7 @@ registers the 4 pipeline tools and 3 hook callbacks.
 
 | Entity | Signature | Description |
 |--------|-----------|-------------|
-| `register(ctx)` | `(ctx: Any) -> None` | Main entry point: fabricium registration + 4 tools + 3 hooks |
+| `register(ctx)` | `(ctx: Any) -> None` | Main entry point: fabricium registration + 4 tools + 4 hooks |
 | `plugin` | `HermesPlugin(name="jovaltus", ...)` | Fabricium plugin instance (CLI + skills auto-discovered) |
 
 ## Registration Flow
