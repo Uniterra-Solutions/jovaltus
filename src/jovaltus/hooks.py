@@ -3,11 +3,13 @@
 Registered by ``hooks.init(ctx)`` in ``register()`` (Contract §2). Hook
 callbacks receive ONLY their hook kwargs — never ctx (verified
 ``plugins.py:1936``) — so the ctx captured at init time lives module-level
-and is used to dispatch the next pipeline phase from ``subagent_stop``.
+and is used to dispatch the next pipeline phase from ``subagent_stop`` and
+``post_llm_call``.
 
 No-op rule (Contract §2): a hook only acts when the child belongs to the
 plugin's own pipeline — a goal-marker match for ``subagent_start``, the
-active child session id for ``subagent_stop``. Children of an
+active child session id for ``subagent_stop``, a ``*_waiting`` phase with a
+main-agent turn for ``post_llm_call``. Children of an
 execute-orchestrator's grandchildren, other plugins' children, and
 user-initiated subagents never touch pipeline state. Everything is guarded
 so a misbehaving hook can never break the agent loop.
@@ -31,6 +33,9 @@ _CTX: Any = None
 _MARKER_PREFIX = "[jovaltus-pipeline:"
 _VALID_TOOLS: tuple[str, ...] = ("plan", "execute", "simplify", "review")
 _REVIEWER_PHASES: tuple[str, ...] = ("simplify", "review")
+# Phases where the reviewer found defects and the MAIN agent fixes them
+# (no subagent iteration cap). The post_llm_call hook watches these.
+_WAITING_PHASES: tuple[str, ...] = ("simplify_waiting", "review_waiting")
 # Mirrors jstate._SUCCESS_STATUSES; kept local to avoid importing private names.
 _SUCCESS_STATUSES: tuple[str, ...] = ("success", "completed")
 
@@ -106,6 +111,43 @@ def on_pre_llm_call(**kwargs: Any) -> dict[str, str] | None:
         return None
 
 
+def on_post_llm_call(**kwargs: Any) -> None:
+    """Re-dispatch the reviewer after the main agent finishes fixing.
+
+    Fires once per completed agent turn (turn_finalizer.py:573). Acts only
+    when the pipeline is parked in a ``*_waiting`` phase (the reviewer
+    verdict was "fix" and the main agent was woken to fix) AND the completed
+    turn belongs to the main agent — not a subagent. All other states are
+    no-ops, so the hook is effectively absent before the pipeline starts
+    and after it ends.
+    """
+    try:
+        p = jstate.get_pipeline()
+        if p is None or p.status != "running":
+            return
+        if p.phase not in _WAITING_PHASES:
+            return
+        if str(kwargs.get("platform")) == "subagent":
+            return  # subagent turns must not trigger the next review
+        next_phase = CHAIN[p.tool][p.phase]
+        if next_phase == "done":
+            _finish_done(p)
+            return
+        jstate.set_phase(p, next_phase)
+        result = dispatch_pipeline_step(p, next_phase)
+        if result.get("status") != "dispatched":
+            # Same deterministic-failure contract as _advance: never leave the
+            # pipeline "running" with no active child.
+            message = str(
+                result.get("message")
+                or f"dispatch failed for phase {next_phase} (status={result.get('status')!r})"
+            )
+            logger.error("Jovaltus dispatch failed at %s: %s", next_phase, message)
+            _finish_failed(p, error=message)
+    except Exception:  # noqa: BLE001 — a bad hook must not break the loop
+        logger.exception("Jovaltus post_llm_call hook failed")
+
+
 # ── Chain advancement ------------------------------------------------------
 
 
@@ -123,8 +165,16 @@ def _advance(p: jstate.PipelineState) -> None:
             jstate.set_verdict(p, "pass")
             _finish_done(p)
             return
+        # "fix": the main agent performs the fixes (no subagent iteration
+        # cap, full conversation context). Park the pipeline in the waiting
+        # phase and wake the main agent with the findings; on_post_llm_call
+        # re-dispatches the reviewer once the fixing turn ends.
         p.loop_iteration += 1
         jstate.set_verdict(p, verdict)  # persists the incremented counter too
+        waiting_phase = _waiting_phase(p.tool)
+        jstate.set_phase(p, waiting_phase)
+        _push_fix_request_event(p)
+        return
     next_phase = CHAIN[p.tool][p.phase]
     if next_phase == "done":
         _finish_done(p)
@@ -140,6 +190,15 @@ def _advance(p: jstate.PipelineState) -> None:
         )
         logger.error("Jovaltus dispatch failed at %s: %s", next_phase, message)
         _finish_failed(p, error=message)
+
+
+def _waiting_phase(tool: str) -> str:
+    """The parking phase for a reviewer's \"fix\" verdict (no subagent runs)."""
+    if tool == "simplify":
+        return "simplify_waiting"
+    if tool == "review":
+        return "review_waiting"
+    raise ValueError(f"no waiting phase for tool {tool!r}")
 
 
 def _finish_done(p: jstate.PipelineState) -> None:
@@ -197,6 +256,72 @@ def _push_completion_event(p: jstate.PipelineState, ok: bool) -> None:
         process_registry.completion_queue.put(_build_completion_event(p, ok, _ROUTING))
     except Exception:  # noqa: BLE001 — a bad notification must not break the loop
         logger.debug("Jovaltus completion notification failed", exc_info=True)
+
+
+def _build_fix_request_event(
+    p: jstate.PipelineState, routing: dict[str, str]
+) -> dict[str, Any]:
+    """Fix-request wake-up event for the main agent.
+
+    The host dedups completions on ``(type, session_id)``, so the session id
+    carries ``loop_iteration``: each loop round gets a distinct identity and
+    later fix requests are never swallowed.
+    """
+    findings = _read_findings(p)
+    session_id = f"jovaltus-{p.tool}-{Path(p.run_dir).name}-fix-{p.loop_iteration}"
+    evt: dict[str, Any] = {
+        "type": "completion",
+        "session_id": session_id,
+        "command": f"jovaltus {p.tool}",
+        "exit_code": 0,
+        "completion_reason": "needs_fix",
+        "output": (
+            f"[Jovaltus] {p.tool} round {p.loop_iteration}: reviewer "
+            f"found defects. Fix them in the working tree; the reviewer "
+            f"re-runs automatically after this turn.\n\n{findings}".strip()
+        ),
+    }
+    if routing.get("session_key"):
+        evt["session_key"] = routing["session_key"]
+    if routing.get("origin_ui_session_id"):
+        evt["origin_ui_session_id"] = routing["origin_ui_session_id"]
+    return evt
+
+
+def _push_fix_request_event(p: jstate.PipelineState) -> None:
+    """Wake the main agent to fix the reviewer's findings.
+
+    Fired when a reviewer verdicts "fix": the pipeline parks in a
+    ``*_waiting`` phase and the main agent takes over the fixes. The event
+    carries the findings from ``verdict.json`` and a per-iteration
+    ``session_id`` so the host's completion dedup key ``(type, session_id)``
+    never swallows later fix requests in the same loop.
+    """
+    try:
+        from tools.process_registry import process_registry
+    except Exception:  # noqa: BLE001 — no Hermes runtime (CI)
+        return
+    try:
+        from jovaltus.tools import _ROUTING
+
+        process_registry.completion_queue.put(_build_fix_request_event(p, _ROUTING))
+    except Exception:  # noqa: BLE001 — a bad notification must not break the loop
+        logger.debug("Jovaltus fix-request notification failed", exc_info=True)
+
+
+def _read_findings(p: jstate.PipelineState) -> str:
+    """The reviewer's ``findings`` text from verdict.json, or ``\"\"``."""
+    verdict_file = Path(p.run_dir) / "verdict.json"
+    try:
+        data = json.loads(verdict_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    findings = data.get("findings")
+    if not isinstance(findings, str):
+        return ""
+    return findings
 
 
 def _read_verdict(p: jstate.PipelineState) -> str | None:

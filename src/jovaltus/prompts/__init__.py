@@ -15,9 +15,7 @@ PROMPT_NAMES: tuple[str, ...] = (
     "tasks",
     "execute",
     "simplify-review",
-    "simplify-fix",
     "review",
-    "review-fix",
 )
 
 _PROMPTS_DIR: Path = Path(__file__).resolve().parent

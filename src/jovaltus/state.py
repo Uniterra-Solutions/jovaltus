@@ -28,9 +28,9 @@ PHASES: tuple[str, ...] = (
     "tasks",
     "execute",
     "simplify",
-    "simplify_fix",
+    "simplify_waiting",
     "review",
-    "review_fix",
+    "review_waiting",
 )
 
 STATUSES: tuple[str, ...] = ("idle", "running", "done", "failed")

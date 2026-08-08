@@ -126,15 +126,15 @@ _PHASE_PROMPTS: dict[str, str] = {
     "tasks": "tasks",
     "execute": "execute",
     "simplify": "simplify-review",
-    "simplify_fix": "simplify-fix",
     "review": "review",
-    "review_fix": "review-fix",
 }
 
 # Contract §3 chain table: phase -> next phase. The simplify/review reviewer
 # legs are verdict-driven (hooks.py reads verdict.json before following the
-# "simplify" -> "simplify_fix" / "review" -> "review_fix" edges); fixer
-# phases always return to their reviewer phase.
+# "simplify" -> "simplify_waiting" / "review" -> "review_waiting" edges).
+# The waiting phases dispatch NO subagent: the main agent performs the fixes
+# itself (no subagent iteration cap), and the post_llm_call hook re-dispatches
+# the reviewer when the main agent's fixing turn ends (hooks.py:on_post_llm_call).
 CHAIN: dict[str, dict[str, str]] = {
     "plan": {
         "prd": "research",
@@ -143,8 +143,8 @@ CHAIN: dict[str, dict[str, str]] = {
         "tasks": "done",
     },
     "execute": {"execute": "done"},
-    "simplify": {"simplify": "simplify_fix", "simplify_fix": "simplify"},
-    "review": {"review": "review_fix", "review_fix": "review"},
+    "simplify": {"simplify": "simplify_waiting", "simplify_waiting": "simplify"},
+    "review": {"review": "review_waiting", "review_waiting": "review"},
 }
 
 # Contract §1 schemas (properties + required).  MUST wrap in "parameters" —
@@ -224,9 +224,10 @@ def register(ctx: Any) -> None:
         description=(
             "USE WHEN: the plan's implementation exists and you want the "
             "code it produced simplified. Dispatches a review subagent to "
-            "find simplification opportunities in the uncommitted diff, then "
-            "a fixer, looping until the review passes. Requires the plan "
-            "path."
+            "find simplification opportunities in the uncommitted diff; on "
+            "a fix verdict you (the main agent) apply the suggestions and "
+            "the reviewer re-runs automatically until it passes. Requires "
+            "the plan path."
         ),
         emoji="🧹",
     )
@@ -240,8 +241,9 @@ def register(ctx: Any) -> None:
             "USE WHEN: the plan's implementation exists and you want the "
             "code it produced reviewed. Dispatches an adversarial review "
             "subagent to hunt for bugs, security holes, and contract "
-            "violations in the uncommitted diff, then a fixer, looping until "
-            "the review passes. Requires the plan path."
+            "violations in the uncommitted diff; on a fix verdict you (the "
+            "main agent) fix the findings and the reviewer re-runs "
+            "automatically until it passes. Requires the plan path."
         ),
         emoji="🛡️",
     )

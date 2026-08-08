@@ -90,8 +90,8 @@ def register(ctx: Any) -> None:
     - CLI: ``hermes jovaltus setup|status|update|update --check``
     - Bundled skills from ``skills/``
     ``tools.register(ctx)`` then registers the four pipeline tools (plan /
-    execute / simplify / review) and the three hook callbacks (subagent_start
-    / subagent_stop / pre_llm_call) per Contract §6.
+    execute / simplify / review) and the four hook callbacks (subagent_start
+    / subagent_stop / pre_llm_call / post_llm_call) per Contract §6.
     """
     plugin.register(ctx)
 
@@ -103,5 +103,6 @@ def register(ctx: Any) -> None:
     ctx.register_hook("subagent_start", jovaltus_hooks.on_subagent_start)
     ctx.register_hook("subagent_stop", jovaltus_hooks.on_subagent_stop)
     ctx.register_hook("pre_llm_call", jovaltus_hooks.on_pre_llm_call)
+    ctx.register_hook("post_llm_call", jovaltus_hooks.on_post_llm_call)
 
     logger.info("Jovaltus registered (via Fabricium)")
