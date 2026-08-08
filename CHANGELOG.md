@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v1.1.4 — 2026-08-08
+
+### Fixed
+- **Stale pipelines from v1.1.2 no longer deadlock after upgrade.** A
+  pipeline started on v1.1.2 (or earlier) persists its phase on disk; when
+  the plugin upgrades mid-run, `get_pipeline()` now migrates
+  `simplify_fix`/`review_fix` to the v1.1.3+ waiting phases
+  (`simplify_waiting`/`review_waiting`) so the new CHAIN never KeyErrors on
+  the stale key. A pipeline whose phase is unknown (corrupted/foreign
+  state) is auto-cleared back to idle instead of stranding
+  `status=running` with no active child. (Observed 2026-08-08: a v1.1.2
+  simplify run parked at `phase=simplify_fix` after the gateway restarted
+  onto v1.1.3.)
+
+---
+
 ## v1.1.3 — 2026-08-08
 
 ### Fixed

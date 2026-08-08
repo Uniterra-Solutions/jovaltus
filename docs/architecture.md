@@ -103,7 +103,17 @@ Pipeline state lives in `~/.hermes/jovaltus_state.json` under the top-level
 `"pipeline"` key (the `"profiles"` key is fabricium-owned and never touched)
 — `src/jovaltus/state.py:107-116`. Every transition is persisted, so an
 interrupted pipeline resumes on the next session via `get_pipeline()`
-(`state.py:119-128`).
+(`state.py:129-165`).
+
+`get_pipeline()` is self-healing across plugin upgrades:
+- A pipeline persisted by v1.1.2 (phase `simplify_fix` / `review_fix`) is
+  migrated to the v1.1.3+ waiting phases (`simplify_waiting` /
+  `review_waiting`) — the new CHAIN has no fixer-phase keys, so without the
+  migration the hooks would KeyError and strand the loop
+  (`_LEGACY_FIXER_PHASES`, `state.py:56-63`).
+- A phase the CHAIN does not know at all (corrupted/foreign state) is
+  auto-cleared back to idle (`reset_pipeline`) rather than deadlocking
+  `CHAIN[tool][phase]`.
 
 Phase sequences (chain table `CHAIN` in `src/jovaltus/tools.py:57-67`):
 
