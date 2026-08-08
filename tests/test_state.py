@@ -44,6 +44,102 @@ def test_get_pipeline_idle(fake_home: Path) -> None:
     assert jstate.get_pipeline() is None
 
 
+@pytest.mark.parametrize(
+    ("legacy_phase", "migrated_phase"),
+    [
+        ("simplify_fix", "simplify_waiting"),
+        ("review_fix", "review_waiting"),
+    ],
+)
+def test_get_pipeline_migrates_legacy_fixer_phase(
+    fake_home: Path, legacy_phase: str, migrated_phase: str
+) -> None:
+    """v1.1.2 fixer phases migrate to the v1.1.3+ waiting phases.
+
+    A pipeline started on an older plugin keeps its phase on disk. After an
+    upgrade, get_pipeline() must map simplify_fix/review_fix to the waiting
+    phases — otherwise the new CHAIN KeyErrors on the stale key and the
+    pipeline strands mid-loop.
+    """
+    raw = _state_file(fake_home)
+    raw.write_text(
+        json.dumps(
+            {
+                "profiles": {},
+                "pipeline": {
+                    "run_dir": "/tmp/run",
+                    "tool": "simplify"
+                    if legacy_phase.startswith("simplify")
+                    else "review",
+                    "phase": legacy_phase,
+                    "status": "running",
+                    "user_requirements": "",
+                    "plan_path": "/tmp/run/tasks.md",
+                    "active_child_session_id": None,
+                    "loop_iteration": 3,
+                    "verdict": "fix",
+                    "updated_at": "2026-08-08T00:00:00+00:00",
+                    "error": None,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    p = jstate.get_pipeline()
+    assert p is not None
+    assert p.phase == migrated_phase
+    assert p.loop_iteration == 3
+    assert p.verdict == "fix"
+    # The migration is persisted, not just returned in memory.
+    resumed = jstate.get_pipeline()
+    assert resumed is not None
+    assert resumed.phase == migrated_phase
+
+
+def test_get_pipeline_clears_unknown_phase(fake_home: Path) -> None:
+    """A corrupt/unknown phase is auto-cleared so it cannot deadlock the chain.
+
+    If a stale or foreign state carries a phase the CHAIN does not know, the
+    hooks would KeyError on CHAIN[tool][phase] and strand the pipeline in
+    status=running forever. get_pipeline() clears it back to idle.
+    """
+    raw = _state_file(fake_home)
+    raw.write_text(
+        json.dumps(
+            {
+                "profiles": {},
+                "pipeline": {
+                    "run_dir": "/tmp/run",
+                    "tool": "plan",
+                    "phase": "totally_bogus_phase",
+                    "status": "running",
+                    "user_requirements": "",
+                    "plan_path": None,
+                    "active_child_session_id": None,
+                    "loop_iteration": 0,
+                    "verdict": None,
+                    "updated_at": "2026-08-08T00:00:00+00:00",
+                    "error": None,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert jstate.get_pipeline() is None
+    assert jstate.get_pipeline() is None  # still idle on next read
+
+
+def test_get_pipeline_keeps_valid_phases(fake_home: Path) -> None:
+    """Valid running/done phases pass through untouched."""
+    jstate.start_pipeline("plan", run_dir="/tmp/run", user_requirements="req")
+    jstate.set_phase(jstate.get_pipeline(), "done")  # type: ignore[arg-type]
+    p = jstate.get_pipeline()
+    assert p is not None
+    assert p.phase == "done"
+
+
 def test_start_pipeline_plan(fake_home: Path) -> None:
     """plan starts at phase prd with status running and persists."""
     p = jstate.start_pipeline(

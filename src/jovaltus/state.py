@@ -52,6 +52,15 @@ _FIRST_PHASE: dict[str, str] = {
 # phase chains (e.g. plan: prd → … → tasks → done).
 _VALID_PHASES: tuple[str, ...] = PHASES + ("done",)
 
+# v1.1.2-and-earlier fixer-phase names → their v1.1.3+ waiting-phase names.
+# A pipeline started on an older plugin keeps its phase on disk; when the
+# plugin is upgraded mid-run, get_pipeline() migrates these so the new
+# CHAIN (which has no simplify_fix/review_fix keys) never KeyErrors.
+_LEGACY_FIXER_PHASES: dict[str, str] = {
+    "simplify_fix": "simplify_waiting",
+    "review_fix": "review_waiting",
+}
+
 _VALID_VERDICTS: tuple[str, ...] = ("pass", "fix")
 
 
@@ -131,11 +140,29 @@ def get_pipeline() -> PipelineState | None:
 
     Always reads from disk, so an interrupted pipeline resumes across
     sessions and process boundaries.
+
+    Self-healing: a pipeline persisted by an older plugin version is
+    migrated (``simplify_fix``/``review_fix`` → ``*_waiting``) and a
+    pipeline whose phase is unknown (corrupted state) is auto-cleared so
+    it can never deadlock the chain with a KeyError.
     """
     raw = _load().get(_PIPELINE_KEY)
     if not isinstance(raw, dict):
         return None
-    return PipelineState.from_dict(raw)
+    p = PipelineState.from_dict(raw)
+    # v1.1.2 fixer phases no longer exist in the v1.1.3+ CHAIN; migrate the
+    # parked phase so the waiting-phase hooks take over the loop.
+    migrated = _LEGACY_FIXER_PHASES.get(p.phase)
+    if migrated is not None:
+        p.phase = migrated
+        p.updated_at = _now()
+        _persist(p)
+    if p.phase not in _VALID_PHASES:
+        # Unknown phase (corrupt/foreign state): clear it rather than let a
+        # hook KeyError on CHAIN[tool][phase] and strand the pipeline.
+        reset_pipeline()
+        return None
+    return p
 
 
 def start_pipeline(
