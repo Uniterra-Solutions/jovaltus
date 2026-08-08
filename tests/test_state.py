@@ -24,9 +24,7 @@ PROMPT_TOKENS: dict[str, list[str]] = {
     "tasks": ["[[run_dir]]"],
     "execute": ["[[run_dir]]", "[[plan_path]]"],
     "simplify-review": ["[[run_dir]]", "[[plan_path]]"],
-    "simplify-fix": ["[[run_dir]]", "[[plan_path]]"],
     "review": ["[[run_dir]]", "[[plan_path]]"],
-    "review-fix": ["[[run_dir]]", "[[plan_path]]"],
 }
 
 
@@ -272,14 +270,12 @@ def test_prompt_names() -> None:
         "tasks",
         "execute",
         "simplify-review",
-        "simplify-fix",
         "review",
-        "review-fix",
     )
 
 
 def test_load_prompt_all_names() -> None:
-    """All 9 prompts load as non-empty Markdown."""
+    """All 7 prompts load as non-empty Markdown."""
     for name in PROMPT_NAMES:
         text = load_prompt(name)
         assert text.strip(), f"prompt {name!r} is empty"

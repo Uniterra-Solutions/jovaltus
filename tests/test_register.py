@@ -102,15 +102,21 @@ def test_register_registers_exactly_four_tools() -> None:
     assert by_name["review"]["handler"] is tools.review_handler
 
 
-def test_register_registers_exactly_three_hooks() -> None:
+def test_register_registers_exactly_four_hooks() -> None:
     ctx = _register()
     names = [name for name, _ in ctx.hooks]
-    assert names == ["subagent_start", "subagent_stop", "pre_llm_call"]
+    assert names == [
+        "subagent_start",
+        "subagent_stop",
+        "pre_llm_call",
+        "post_llm_call",
+    ]
 
     by_name = dict(ctx.hooks)
     assert by_name["subagent_start"] is hooks.on_subagent_start
     assert by_name["subagent_stop"] is hooks.on_subagent_stop
     assert by_name["pre_llm_call"] is hooks.on_pre_llm_call
+    assert by_name["post_llm_call"] is hooks.on_post_llm_call
 
 
 def test_register_descriptions_contain_contract_prefixes() -> None:

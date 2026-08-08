@@ -269,30 +269,33 @@ def test_on_subagent_stop_completed_status_is_success(
 
 
 # ── subagent_stop: simplify / review verdict loops --------------------------
+#
+# Architecture (v1.2.0): the reviewer subagent writes verdict.json; a "fix"
+# verdict does NOT dispatch a fixer subagent. The pipeline parks in a
+# *_waiting phase, wakes the main agent with the findings, and the
+# post_llm_call hook re-dispatches the reviewer after the main agent's
+# fixing turn ends.
 
 
 @pytest.mark.parametrize(
-    ("tool", "fix_phase", "reviewer_marker", "fixer_marker"),
+    ("tool", "waiting_phase", "reviewer_marker"),
     [
         (
             "simplify",
-            "simplify_fix",
+            "simplify_waiting",
             "[jovaltus-pipeline:simplify:simplify]",
-            "[jovaltus-pipeline:simplify:simplify_fix]",
         ),
         (
             "review",
-            "review_fix",
+            "review_waiting",
             "[jovaltus-pipeline:review:review]",
-            "[jovaltus-pipeline:review:review_fix]",
         ),
     ],
 )
 def test_verdict_pass_finishes_done(
     tool: str,
-    fix_phase: str,
+    waiting_phase: str,
     reviewer_marker: str,
-    fixer_marker: str,
     fake_ctx: FakeCtx,
     fake_home: Path,
     tmp_path: Path,
@@ -312,52 +315,153 @@ def test_verdict_pass_finishes_done(
 
 
 @pytest.mark.parametrize(
-    ("tool", "fix_phase", "reviewer_marker", "fixer_marker"),
+    ("tool", "waiting_phase", "reviewer_marker"),
     [
         (
             "simplify",
-            "simplify_fix",
+            "simplify_waiting",
             "[jovaltus-pipeline:simplify:simplify]",
-            "[jovaltus-pipeline:simplify:simplify_fix]",
         ),
         (
             "review",
-            "review_fix",
+            "review_waiting",
             "[jovaltus-pipeline:review:review]",
-            "[jovaltus-pipeline:review:review_fix]",
         ),
     ],
 )
-def test_verdict_fix_loop_no_cap(
+def test_verdict_fix_parks_waiting_and_wakes_main_agent(
     tool: str,
-    fix_phase: str,
+    waiting_phase: str,
     reviewer_marker: str,
-    fixer_marker: str,
     fake_ctx: FakeCtx,
     fake_home: Path,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """fix → fixer → reviewer → fix → fixer → reviewer (no iteration cap)."""
+    """fix → *_waiting (no fixer subagent) + a per-iteration wake-up event."""
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     _verdict(run_dir, "fix")
+    pushed: list[tuple[Any, bool]] = []
+    monkeypatch.setattr(
+        hooks, "_push_fix_request_event", lambda p: pushed.append((p, True))
+    )
     jstate.start_pipeline(tool, str(run_dir), plan_path=str(run_dir / "tasks.md"))
+
+    _run_child()  # reviewer -> fix
+    p = jstate.get_pipeline()
+    assert p is not None
+    assert p.phase == waiting_phase
+    assert p.status == "running"
+    assert p.loop_iteration == 1
+    assert p.verdict == "fix"
+    assert fake_ctx.subagent_lifecycle.launches == []  # no fixer dispatched
+    assert len(pushed) == 1  # main agent woken once per round
+
+
+def test_post_llm_call_dispatches_reviewer_after_fixing_turn(
+    fake_ctx: FakeCtx, fake_home: Path, tmp_path: Path
+) -> None:
+    """The main agent's fixing turn ends → reviewer re-dispatched."""
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _verdict(run_dir, "fix")
+    jstate.start_pipeline("review", str(run_dir), plan_path=str(run_dir / "tasks.md"))
+
+    _run_child()  # reviewer -> review_waiting
+    hooks.on_post_llm_call(platform="desktop", session_id="main-sess")
+
+    p = jstate.get_pipeline()
+    assert p is not None
+    assert p.phase == "review"
+    assert p.status == "running"
+    assert "[jovaltus-pipeline:review:review]" in _last_goal(fake_ctx)
+
+
+def test_post_llm_call_dispatches_simplify_reviewer(
+    fake_ctx: FakeCtx, fake_home: Path, tmp_path: Path
+) -> None:
+    """Same for simplify: *_waiting + main-agent turn → simplify reviewer."""
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _verdict(run_dir, "fix")
+    jstate.start_pipeline("simplify", str(run_dir), plan_path=str(run_dir / "tasks.md"))
+
+    _run_child()  # simplify -> simplify_waiting
+    hooks.on_post_llm_call(platform="desktop")
+
+    p = jstate.get_pipeline()
+    assert p is not None
+    assert p.phase == "simplify"
+    assert "[jovaltus-pipeline:simplify:simplify]" in _last_goal(fake_ctx)
+
+
+def test_post_llm_call_noop_when_not_waiting(
+    fake_ctx: FakeCtx, fake_home: Path
+) -> None:
+    """A normal (non-loop) pipeline turn never triggers a dispatch."""
+    jstate.start_pipeline("plan", "/tmp/run", user_requirements="req")
+    hooks.on_post_llm_call(platform="desktop")
+    assert fake_ctx.subagent_lifecycle.launches == []
+
+
+def test_post_llm_call_noop_on_subagent_turn(
+    fake_ctx: FakeCtx, fake_home: Path, tmp_path: Path
+) -> None:
+    """A subagent's own post_llm_call must not advance the loop."""
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _verdict(run_dir, "fix")
+    jstate.start_pipeline("review", str(run_dir), plan_path=str(run_dir / "tasks.md"))
+
+    _run_child()  # reviewer -> review_waiting
+    hooks.on_post_llm_call(platform="subagent", session_id="child-sess")
+
+    p = jstate.get_pipeline()
+    assert p is not None
+    assert p.phase == "review_waiting"  # untouched
+    assert fake_ctx.subagent_lifecycle.launches == []
+
+
+def test_post_llm_call_noop_when_pipeline_done(
+    fake_ctx: FakeCtx, fake_home: Path, tmp_path: Path
+) -> None:
+    """After the loop ends (done), the hook is inert — it no longer exists."""
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _verdict(run_dir, "pass")
+    jstate.start_pipeline("review", str(run_dir), plan_path=str(run_dir / "tasks.md"))
+    _run_child()  # reviewer passes -> done
+
+    hooks.on_post_llm_call(platform="desktop")
+    p = jstate.get_pipeline()
+    assert p is not None and p.status == "done"
+    assert fake_ctx.subagent_lifecycle.launches == []
+
+
+def test_verdict_fix_loop_no_cap(
+    fake_ctx: FakeCtx, fake_home: Path, tmp_path: Path
+) -> None:
+    """fix → waiting → main turn → review → fix … (no iteration cap)."""
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _verdict(run_dir, "fix")
+    jstate.start_pipeline("review", str(run_dir), plan_path=str(run_dir / "tasks.md"))
 
     for iteration in (1, 2):
         _run_child()  # reviewer -> fix
         p = jstate.get_pipeline()
         assert p is not None
-        assert p.phase == fix_phase
+        assert p.phase == "review_waiting"
         assert p.loop_iteration == iteration
         assert p.verdict == "fix"
-        assert fixer_marker in _last_goal(fake_ctx)
 
-        _run_child()  # fixer -> back to reviewer
+        hooks.on_post_llm_call(platform="desktop")  # main agent finished fixing
         p = jstate.get_pipeline()
         assert p is not None
-        assert p.phase == tool
+        assert p.phase == "review"
         assert p.loop_iteration == iteration
-        assert reviewer_marker in _last_goal(fake_ctx)
+        assert "[jovaltus-pipeline:review:review]" in _last_goal(fake_ctx)
 
 
 def test_verdict_fix_then_pass(
@@ -370,7 +474,7 @@ def test_verdict_fix_then_pass(
     jstate.start_pipeline("simplify", str(run_dir), plan_path=str(run_dir / "tasks.md"))
 
     _run_child()  # reviewer -> fix
-    _run_child()  # fixer -> reviewer
+    hooks.on_post_llm_call(platform="desktop")  # main agent fixes, turn ends
     _verdict(run_dir, "pass")
     _run_child()  # reviewer passes
 
@@ -439,6 +543,7 @@ def test_hooks_are_resilient_to_state_errors(
     assert hooks.on_pre_llm_call() is None
     hooks.on_subagent_start(child_session_id="c1", child_goal="whatever")
     hooks.on_subagent_stop(child_session_id="c1", child_status="success")
+    hooks.on_post_llm_call(platform="desktop")
 
 
 # ── completion notification (process_registry completion_queue) ---------------
@@ -476,6 +581,55 @@ def test_build_completion_event_failed_shape(
     assert evt["completion_reason"] == "failed"
     assert "session_key" not in evt
     assert "origin_ui_session_id" not in evt
+
+
+def test_fix_request_event_shape_and_dedup_key(
+    fake_ctx: FakeCtx, fake_home: Path, tmp_path: Path
+) -> None:
+    """The fix-request wake-up carries findings + a per-iteration session id.
+
+    The host dedups completions on ``(type, session_id)``, so each loop
+    round must get a distinct session_id or later fix requests are
+    swallowed and the main agent is never woken again.
+    """
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "verdict.json").write_text(
+        json.dumps({"verdict": "fix", "findings": "T1: bug\nT2: hole"}),
+        encoding="utf-8",
+    )
+    jstate.start_pipeline("review", str(run_dir), plan_path=str(run_dir / "tasks.md"))
+    p = jstate.get_pipeline()
+    assert p is not None
+    p.loop_iteration = 3
+
+    evt = hooks._build_fix_request_event(
+        p, {"session_key": "sess-1", "origin_ui_session_id": "ui-9"}
+    )
+    assert evt["type"] == "completion"
+    assert evt["session_id"] == "jovaltus-review-run-fix-3"
+    assert evt["command"] == "jovaltus review"
+    assert evt["exit_code"] == 0
+    assert evt["completion_reason"] == "needs_fix"
+    assert "T1: bug" in evt["output"] and "T2: hole" in evt["output"]
+    assert "round 3" in evt["output"]
+    assert evt["session_key"] == "sess-1"
+    assert evt["origin_ui_session_id"] == "ui-9"
+
+
+def test_fix_request_event_no_runtime_is_silent(
+    fake_ctx: FakeCtx, fake_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without the Hermes runtime the wake-up is skipped (best-effort)."""
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _verdict(run_dir, "fix")
+    jstate.start_pipeline("review", str(run_dir), plan_path=str(run_dir / "tasks.md"))
+    p = jstate.get_pipeline()
+    assert p is not None
+
+    monkeypatch.setitem(__import__("sys").modules, "tools", None)  # force ImportError
+    hooks._push_fix_request_event(p)  # must not raise
 
 
 def test_pipeline_done_pushes_completion_event(
