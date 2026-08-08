@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v1.1.3 — 2026-08-08
+
+### Fixed
+- **Review/simplify loops no longer deadlock on the fixer's iteration
+  cap.** Previously a `"fix"` verdict dispatched a fixer *subagent*, which
+  shares Hermes's per-subagent iteration budget (hardcoded 50 via
+  `subagent_lifecycle`). On large finding sets the fixer was cut off
+  mid-fix, the next review re-flagged the same defects, and the loop
+  burned tokens without converging (observed 2026-08-08: 16 rounds, all
+  iteration-capped, `verdict.json` unchanged). Now a `"fix"` verdict parks
+  the pipeline in a `*_waiting` phase and the **main agent performs the
+  fixes** — it has no subagent iteration cap and full conversation
+  context. When the fixing turn ends, the new `post_llm_call` hook
+  re-dispatches the reviewer automatically.
+
+### Changed
+- **Phase chains** — `simplify_fix`/`review_fix` are replaced by
+  `simplify_waiting`/`review_waiting` (parking phases; no subagent runs).
+- **4 hooks** — `post_llm_call` added: re-dispatches the reviewer when the
+  pipeline is parked in a `*_waiting` phase and the completed turn belongs
+  to the main agent (`platform != "subagent"`); inert outside the loop.
+- **Fix-request wake-up** — on a `"fix"` verdict the plugin pushes a
+  completion event carrying the reviewer's findings; the per-iteration
+  `session_id` keeps the host's dedup key from swallowing later rounds.
+- **7 prompts** — `simplify-fix.md` and `review-fix.md` removed (the
+  main agent is the fixer; no fixer prompt needed).
+
+---
+
 ## v1.1.2 — 2026-08-07
 
 ### Fixed

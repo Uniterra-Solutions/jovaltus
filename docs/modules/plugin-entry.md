@@ -108,7 +108,7 @@ notification at `hooks.py:146-216`
 
 ```yaml
 name: jovaltus
-version: 1.1.1
+version: 1.1.3
 description: "Jovaltus Agent Mode — subagent-driven development framework: plan / execute / simplify / review tools, state machine, and hooks"
 author: LaiTszKin
 ```
