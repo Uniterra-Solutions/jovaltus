@@ -261,7 +261,7 @@ jovaltus/
 │   ├── hooks.py             # subagent_start / subagent_stop / pre_llm_call / post_llm_call + completion notification
 │   ├── setup_config.py      # Text-based YAML edit: ensure delegation.max_spawn_depth >= 2
 │   ├── prompts/             # 7 subagent goal prompts (prd, research, acceptance, tasks, execute, simplify-review, review)
-│   ├── plugin.yaml          # Plugin metadata (version 1.1.3)
+│   ├── plugin.yaml          # Plugin metadata (version 1.1.4)
 │   ├── SOUL.md              # Agent identity
 │   └── skills/              # 5 bundled utility skills
 │       ├── agentic-debugging/
