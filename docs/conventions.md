@@ -107,10 +107,10 @@ def register(ctx):
 
 - Every dispatched child's goal contains the marker
   `[jovaltus-pipeline:<tool>:<phase>]` — `subagent_start` matches it to
-  associate the child with the pipeline (`hooks.py:163-175`)
+  associate the child with the pipeline (`hooks.py:359-371`)
 - Prompt substitution is **`str.replace` on `[[token]]`** — never
   `.format()` (prompt bodies contain mermaid `{}` braces;
-  `src/jovaltus/tools.py:253-263`). Tokens: `[[run_dir]]`, `[[repo_root]]`,
+  `src/jovaltus/tools.py:340-352`). Tokens: `[[run_dir]]`, `[[repo_root]]`,
   `[[user_requirements]]` (prd), `[[plan_path]]` (execute/simplify/review)
 - **Every prompt starts with Step 0: read the repository** at
   `[[repo_root]]` (AGENTS.md, manifest, source layout, tests) so the

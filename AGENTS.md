@@ -2,7 +2,7 @@
 
 ## Build & Test
 
-- `uv run pytest -v` — Run full test suite (131 tests)
+- `uv run pytest -v` — Run full test suite (143 tests)
 - `uv run ruff check .` — Lint
 - `uv run ruff format --check .` — Format check
 - `uv run mypy` — Type check (strict mode, config in `pyproject.toml`)
@@ -30,8 +30,8 @@
 - `src/jovaltus/SOUL.md` — Agent identity file applied during `hermes jovaltus setup`
 - `src/jovaltus/skills/` — 5 bundled utility skills:
   `agentic-debugging`, `manage-agents-md`, `manage-git-repo`, `project-documentation`, `qa`
-- `tests/` — 131 pytest tests across 8 test files + conftest
-  - `test_state.py` (25), `test_tools.py` (23), `test_hooks.py` (31), `test_register.py` (5)
+- `tests/` — 143 pytest tests across 8 test files + conftest
+  - `test_state.py` (29), `test_tools.py` (27), `test_hooks.py` (35), `test_register.py` (5)
   - `test_git_utils.py` (19), `test_sync.py` (8), `test_setup_config.py` (12), `integration/test_cli.py` (8)
 
 ## Architecture

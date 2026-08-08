@@ -93,29 +93,29 @@ auto-discovery from `src/jovaltus/skills/`.
   `get_pipeline` / `start_pipeline` / `set_phase` / `register_child` /
   `complete_child` / `set_verdict` / `finish_pipeline` / `status_text` /
   `reset_pipeline`.
-- **4 hooks** (`src/jovaltus/hooks.py`): `on_subagent_start` (44-64),
-  `on_subagent_stop` (67-90), `on_pre_llm_call` (93-106),
-  `on_post_llm_call` (109-143).
+- **4 hooks** (`src/jovaltus/hooks.py`): `on_subagent_start` (49-77),
+  `on_subagent_stop` (79-106), `on_pre_llm_call` (108-122),
+  `on_post_llm_call` (124-165).
 
 ## State Machine and Phase Chains
 
 Pipeline state lives in `~/.hermes/jovaltus_state.json` under the top-level
 `"pipeline"` key (the `"profiles"` key is fabricium-owned and never touched)
-— `src/jovaltus/state.py:107-116`. Every transition is persisted, so an
+— `src/jovaltus/state.py:134-149`. Every transition is persisted, so an
 interrupted pipeline resumes on the next session via `get_pipeline()`
-(`state.py:129-165`).
+(`state.py:151-179`).
 
 `get_pipeline()` is self-healing across plugin upgrades:
 - A pipeline persisted by v1.1.2 (phase `simplify_fix` / `review_fix`) is
   migrated to the v1.1.3+ waiting phases (`simplify_waiting` /
   `review_waiting`) — the new CHAIN has no fixer-phase keys, so without the
   migration the hooks would KeyError and strand the loop
-  (`_LEGACY_FIXER_PHASES`, `state.py:56-63`).
+  (`_LEGACY_FIXER_PHASES`, `state.py:59-66`).
 - A phase the CHAIN does not know at all (corrupted/foreign state) is
   auto-cleared back to idle (`reset_pipeline`) rather than deadlocking
   `CHAIN[tool][phase]`.
 
-Phase sequences (chain table `CHAIN` in `src/jovaltus/tools.py:57-67`):
+Phase sequences (chain table `CHAIN` in `src/jovaltus/tools.py:163-171`):
 
 | Tool | Chain | Terminal |
 |------|-------|----------|
@@ -130,44 +130,46 @@ Phase sequences (chain table `CHAIN` in `src/jovaltus/tools.py:57-67`):
 ### How a chain advances
 
 1. A tool handler validates its args, calls `start_pipeline(tool, run_dir,
-   ...)` (`state.py:131-158`), and dispatches the first phase via
-   `dispatch_pipeline_step` (`tools.py:196-240`) — which loads the phase's
+   ...)` (`state.py:181-216`), and dispatches the first phase via
+   `dispatch_pipeline_step` (`tools.py:280-318`) — which loads the phase's
    prompt, substitutes `[[token]]` placeholders with `str.replace`
-   (`tools.py:172-182`), and calls
+   (`tools.py:340-352`), and calls
    `subagent_lifecycle.launch(SubagentLaunchRequest(goal=..., context=...,
    "role": "orchestrator" | "leaf"})`. The `role` is `"orchestrator"` only
    for the execute phase.
 2. `subagent_start` fires when the child spawns: `on_subagent_start`
-   (`hooks.py:42-63`) matches the child's goal against the
+   (`hooks.py:49-77`) matches the child's goal against the
    `[jovaltus-pipeline:<tool>:<phase>]` marker and records the child as the
-   pipeline's active child via `register_child` (`state.py:170-174`). No
+   pipeline's active child via `register_child` (`state.py:227-232`). No
    marker match → no-op (orchestrator grandchildren, foreign children, and
    user-initiated subagents never touch pipeline state).
 3. `subagent_stop` fires when the child completes: `on_subagent_stop`
-   (`hooks.py:67-90`) calls `complete_child` (`state.py:177-194`) — True
+   (`hooks.py:79-106`) calls `complete_child` (`state.py:234-257`) — True
    only for the active child. A non-`"success"` status fails the pipeline
    (`finish_pipeline(ok=False, error=summary)`); otherwise `_advance`
-   (`hooks.py:146-188`) follows the chain:
+   (`hooks.py:167-206`) follows the chain:
    - simplify/review reviewer phases: reads `<run_dir>/verdict.json`
-     (`hooks.py:269-284`); `"pass"` → `set_verdict` + `finish_pipeline(ok=True)`;
+     (`hooks.py:337-357`); `"pass"` → `set_verdict` + `finish_pipeline(ok=True)`;
      `"fix"` → increment `loop_iteration`, set verdict, park the pipeline in
-     the `*_waiting` phase (`_waiting_phase`, `hooks.py:192-201`) and push a
-     fix-request event (`_push_fix_request_event`, `hooks.py:287-305`) that
+     the `*_waiting` phase (`_waiting_phase`, `hooks.py:208-215`) and push a
+     fix-request event (`_push_fix_request_event`, `hooks.py:303-320`) that
      wakes the main agent with the findings. **No fixer subagent is
      dispatched** — the main agent performs the fixes (it has no subagent
      iteration cap and full conversation context). **No iteration cap.**
-   - Other phases: `set_phase(next)` (`state.py:161-167`) + dispatch the
+   - Other phases: `set_phase(next)` (`state.py:218-225`) + dispatch the
      next phase's subagent. `next_phase == "done"` → finish with `ok=True`.
 4. `pre_llm_call` fires before every main-agent turn: `on_pre_llm_call`
-   (`hooks.py:93-106`) returns `{"context": status_text(p)}` when a pipeline
+   (`hooks.py:108-122`) returns `{"context": status_text(p)}` when a pipeline
    exists, else `None` — the status line
    (`[Jovaltus pipeline] tool=... phase=... status=... run_dir=...`,
-   `state.py:217-229`) is injected into the user message so the main agent
+   `state.py:279-292`) is injected into the user message so the main agent
    always sees pipeline state.
 5. `post_llm_call` fires after every completed agent turn:
-   `on_post_llm_call` (`hooks.py:109-143`) re-dispatches the reviewer when
+   `on_post_llm_call` (`hooks.py:124-165`) re-dispatches the reviewer when
    the pipeline is parked in a `*_waiting` phase and the completed turn
-   belongs to the main agent (`platform != "subagent"`). This is how the
+   belongs to the main agent of the owning session (`platform !=
+   "subagent"` and, when the pipeline carries a `session_key`, the turn's
+   `session_id` matches it). This is how the
    loop re-runs the review after the main agent finishes fixing — and it is
    inert once the pipeline is `done`/`failed`, so the hook effectively does
    not exist outside the loop.
@@ -181,24 +183,31 @@ input (e.g. missing `plan` path, nonexistent plan file).
 
 | Tool | Handler | Input | Behavior |
 |------|---------|-------|----------|
-| `plan` | `plan_handler` (`tools.py:379-393`) | `user_requirements` (required) | Computes run dir `<repo_root>/.plan/<YYYYmmdd>/<plan_name>/` (`tools.py:488-503`; repo root inherited from the main agent via `resolve_agent_cwd()` — per-session cwd → `TERMINAL_CWD` → process cwd, `tools.py:337-376`; plan_name = kebab-case of first ~6 words, `-2`/`-3`… suffix on collision); creates the run dir; starts pipeline phase `prd` |
-| `execute` | `execute_handler` (`tools.py:395-407`) | `plan` (required, must exist) | Precondition: effective `delegation.max_spawn_depth >= 2` (`tools.py:519-569`), else returns error; starts pipeline phase `execute` with `role="orchestrator"` |
-| `simplify` | `simplify_handler` (`tools.py:409-421`) | `plan` (required, must exist) | Starts pipeline phase `simplify` (reviewer) |
-| `review` | `review_handler` (`tools.py:423-434`) | `plan` (required, must exist) | Starts pipeline phase `review` (reviewer) |
+| `plan` | `plan_handler` (`tools.py:406-426`) | `user_requirements` (required) | Computes run dir `<repo_root>/.plan/<YYYYmmdd>/<plan_name>/` (`tools.py:531-560`; repo root inherited from the main agent via `resolve_agent_cwd()` — per-session cwd → `TERMINAL_CWD` → process cwd, `tools.py:364-387`; plan_name = kebab-case of first ~6 words, `-2`/`-3`… suffix on collision); creates the run dir; starts pipeline phase `prd` |
+| `execute` | `execute_handler` (`tools.py:428-443`) | `plan` (required, must exist) | Precondition: effective `delegation.max_spawn_depth >= 2` (`tools.py:562-571`), else returns error; starts pipeline phase `execute` with `role="orchestrator"` |
+| `simplify` | `simplify_handler` (`tools.py:445-458`) | `plan` (required, must exist) | Starts pipeline phase `simplify` (reviewer) |
+| `review` | `review_handler` (`tools.py:460-475`) | `plan` (required, must exist) | Starts pipeline phase `review` (reviewer) |
 
 The repo root is passed to children twice: as a `[[repo_root]]` token in
-every prompt (`tools.py:313-325`, substituted with the main agent's working
+every prompt (`tools.py:340-352`, substituted with the main agent's working
 dir from `_repo_root()`), and inside the `context` text
-(`tools.py:327-335`) — never as a tool parameter (the `delegate_task`
+(`tools.py:354-362`) — never as a tool parameter (the `delegate_task`
 handler ignores `workspace_path`/`max_spawn_depth`).
 
 When a pipeline reaches a terminal state (done or failed), `subagent_stop`
 pushes a completion event onto the shared `process_registry.completion_queue`
-(`hooks.py:180-216`) — the same rail background terminal tasks use — so the
+(`hooks.py:217-272`) — the same rail background terminal tasks use — so the
 desktop/TUI, CLI, and gateway surfaces wake the main agent with a
 "pipeline complete" turn instead of leaving it silent until the user's next
-message. Routing metadata (session key, UI session id) is captured on the
-first main-turn dispatch (`tools.py:79-99`).
+message. Routing metadata (session key, UI session id) is captured per-run
+on the main-turn dispatch (`tools.py:94-121`), persisted on the pipeline
+(`state.py:94-97`), and read back by the event builders — so each run's
+notifications are addressed to the session that started it, never a
+process-global snapshot that a parallel session could clobber (v1.1.5
+fix). The hooks also gate on the owning session: `on_subagent_start` /
+`on_subagent_stop` require `parent_session_id == p.session_key` and
+`on_post_llm_call` requires the turn's `session_id == p.session_key` when
+the pipeline carries a session key.
 
 Every subagent reads the repository first. Each prompt's Step 0 instructs
 the child to explore `[[repo_root]]` — `AGENTS.md`/`CLAUDE.md`, the project
@@ -208,7 +217,7 @@ diffs in context. Greenfield repos (no relevant code) are handled
 explicitly in each prompt.
 
 **Subagents share the main agent's toolset.** `SubagentLaunchRequest`
-leaves `allowed_toolsets` unset (`tools.py:244-252`), so Hermes child
+leaves `allowed_toolsets` unset (`tools.py:320-338`), so Hermes child
 construction inherits the parent's enabled toolsets
 (`delegate_tool.py:1392-1395`) instead of restricting children to a fixed
 list — the same file/terminal/web tools that let the main agent read the
@@ -235,14 +244,14 @@ There are no fixer prompts: a `"fix"` verdict parks the pipeline in the
 `*_waiting` phase and the MAIN agent fixes the findings directly (no
 subagent iteration cap); `on_post_llm_call` then re-dispatches the reviewer.
 
-Token substitution is `str.replace` on `[[token]]` (`tools.py:253-263`) —
+Token substitution is `str.replace` on `[[token]]` (`tools.py:340-352`) —
 never `.format()`, because prompt bodies contain mermaid `{}` braces. Tokens
 are `[[run_dir]]`, `[[repo_root]]`, `[[user_requirements]]` (prd only), and
 `[[plan_path]]` (execute/simplify/review phases). Every
 prompt also carries the literal marker `[jovaltus-pipeline:TOOL:PHASE]`
 which the dispatcher replaces with the real
 `[jovaltus-pipeline:<tool>:<phase>]` marker used by `subagent_start`
-(`tools.py:36-38`).
+(`tools.py:144-146`).
 
 ## Bundled Skills (5 utility)
 
@@ -268,6 +277,7 @@ navigates them:
 | 4 hooks wire subagent lifecycle | `subagent_start` associates, `subagent_stop` advances, `pre_llm_call` injects status, `post_llm_call` re-dispatches the reviewer after the main agent's fixing turn | Active |
 | Main agent fixes, not a fixer subagent | A fixer leaf subagent shares the 50-iteration delegation cap and gets cut off mid-fix on large findings (observed 2026-08-08: 16 iteration-capped rounds); the main agent has no such cap | Active |
 | No iteration cap on simplify/review loops | The verdict file is the loop's exit condition; the main agent fixes until the reviewer passes | Active |
+| Per-session routing + parent scoping | Notifications and hook-driven re-dispatches attach to the session that STARTED the run (`PipelineState.session_key` / `origin_ui_session_id`, per-session parent cache), so parallel main-agent sessions in one gateway process never receive or drive each other's pipelines (fixed v1.1.5) | Active |
 | `execute` leaves the diff uncommitted | simplify/review operate on the working tree diff, not commits | Active |
 | Fabricium as the only runtime dependency | Avoids duplicating git wrappers, CLI registration, skill bundling, and state persistence | Active |
 | Self-bootstrap fabricium on import | Hermes may recreate its venv, dropping plugin deps; repair on first import | Active |

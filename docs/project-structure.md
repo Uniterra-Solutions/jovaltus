@@ -5,7 +5,7 @@
 | `src/jovaltus/` | Plugin source — entry point, tools, hooks, state machine, setup auto-config, prompts | `__init__.py`, `state.py`, `tools.py`, `hooks.py`, `setup_config.py`, `prompts/`, `plugin.yaml`, `SOUL.md` |
 | `src/jovaltus/prompts/` | 7 subagent goal prompts (one per dispatched pipeline phase) | `prd.md`, `research.md`, `acceptance.md`, `tasks.md`, `execute.md`, `simplify-review.md`, `review.md` |
 | `src/jovaltus/skills/` | 5 bundled utility Hermes skills | 5 `SKILL.md` files + references/assets/templates |
-| `tests/` | Pytest suite (131 tests) | `conftest.py`, `test_state.py`, `test_tools.py`, `test_hooks.py`, `test_register.py`, `test_git_utils.py`, `test_sync.py`, `test_setup_config.py` |
+| `tests/` | Pytest suite (143 tests) | `conftest.py`, `test_state.py`, `test_tools.py`, `test_hooks.py`, `test_register.py`, `test_git_utils.py`, `test_sync.py`, `test_setup_config.py` |
 | `tests/integration/` | CLI integration tests | `test_cli.py`, `conftest.py` |
 | `.pre-commit-config.yaml` | Pre-commit hooks: ruff check → mypy → ruff format | — |
 | `pyproject.toml` | Project config: deps, build, tooling, entry points | — |
@@ -59,9 +59,9 @@ src/jovaltus/
 ```
 tests/
 ├── conftest.py              # Shared fixtures (git_repo, clear_task_state)
-├── test_state.py            # 25 tests — state machine transitions + resume + prompts
-├── test_tools.py            # 23 tests — 4 tool handlers + dispatch + routing capture
-├── test_hooks.py            # 31 tests — hook callbacks + chain advancement + completion notification
+├── test_state.py            # 29 tests — state machine transitions + resume + prompts
+├── test_tools.py            # 27 tests — 4 tool handlers + dispatch + routing capture
+├── test_hooks.py            # 35 tests — hook callbacks + chain advancement + completion notification
 ├── test_register.py         # 5 tests — registration wiring (4 tools + 4 hooks)
 ├── test_git_utils.py        # 19 tests — git operations via fabricium
 ├── test_sync.py             # 8 tests — state persistence + skill sync
@@ -71,7 +71,7 @@ tests/
     └── test_cli.py          # 8 tests — setup, status, update CLI commands
 ```
 
-**131 tests total** (pytest collects parametrized cases; per-file counts
+**143 tests total** (pytest collects parametrized cases; per-file counts
 are in the Test Layout table above). There is no
 `tests/evals/` directory — the eval harness was removed in v1.0.0;
 behavioral verification is a Phase 7 Docker E2E gate (see
@@ -88,7 +88,7 @@ __init__.py
 tools.py
   └── jovaltus.state, jovaltus.prompts
 hooks.py
-  └── jovaltus.state, jovaltus.tools (CHAIN, dispatch_pipeline_step, _ROUTING)
+  └── jovaltus.state, jovaltus.tools (CHAIN, dispatch_pipeline_step)
 setup_config.py
   └── (stdlib pathlib only)
 state.py

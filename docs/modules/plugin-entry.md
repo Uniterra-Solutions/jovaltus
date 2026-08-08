@@ -85,22 +85,23 @@ signature `handler(args, **kwargs) -> str` (JSON result string):
 
 | Tool | Schema (`required`) | Handler | Description |
 |------|---------------------|---------|-------------|
-| `plan` | `{"user_requirements": ...}` | `plan_handler` (`tools.py:379-393`) | USE WHEN the user wants a software-engineering request turned into an implementation plan (or needs planning for a complex request). Runs PRD → research → acceptance → task DAG |
-| `execute` | `{"plan": ...}` | `execute_handler` (`tools.py:395-407`) | USE WHEN a plan exists and you want to implement its software-engineering work. Requires `delegation.max_spawn_depth >= 2` |
-| `simplify` | `{"plan": ...}` | `simplify_handler` (`tools.py:409-421`) | USE WHEN the plan's implementation exists and you want its code simplified |
-| `review` | `{"plan": ...}` | `review_handler` (`tools.py:423-434`) | USE WHEN the plan's implementation exists and you want its code reviewed |
+| `plan` | `{"user_requirements": ...}` | `plan_handler` (`tools.py:406-426`) | USE WHEN the user wants a software-engineering request turned into an implementation plan (or needs planning for a complex request). Runs PRD → research → acceptance → task DAG |
+| `execute` | `{"plan": ...}` | `execute_handler` (`tools.py:428-443`) | USE WHEN a plan exists and you want to implement its software-engineering work. Requires `delegation.max_spawn_depth >= 2` |
+| `simplify` | `{"plan": ...}` | `simplify_handler` (`tools.py:445-458`) | USE WHEN the plan's implementation exists and you want its code simplified |
+| `review` | `{"plan": ...}` | `review_handler` (`tools.py:460-475`) | USE WHEN the plan's implementation exists and you want its code reviewed |
 
 ## Hook Registration (`hooks.init`)
 
-**Source:** `src/jovaltus/hooks.py:38-41` (init), `44-65` (start),
-`67-91` (stop), `93-106` (pre_llm_call); terminal-state completion
-notification at `hooks.py:146-216`
+**Source:** `src/jovaltus/hooks.py:43-46` (init), `49-77` (start),
+`79-106` (stop), `108-122` (pre_llm_call), `124-165` (post_llm_call);
+terminal-state completion notification at `hooks.py:217-272`
 
 | Hook | Callback | Behavior |
 |------|----------|----------|
-| `subagent_start` | `on_subagent_start(**kwargs) -> None` | Associates a child whose goal contains `[jovaltus-pipeline:<tool>:<phase>]` via `register_child`; no marker match → no-op |
+| `subagent_start` | `on_subagent_start(**kwargs) -> None` | Associates a child whose goal contains `[jovaltus-pipeline:<tool>:<phase>]` via `register_child` (and whose spawning `parent_session_id` matches the pipeline's `session_key` when pinned); no marker match → no-op |
 | `subagent_stop` | `on_subagent_stop(**kwargs) -> None` | Advances the chain when the active child completes; non-success status fails the pipeline; on a terminal state pushes a completion event to `process_registry.completion_queue` so the main agent is notified |
 | `pre_llm_call` | `on_pre_llm_call(**kwargs) -> dict \| None` | Returns `{"context": "<status line>"}` when a pipeline exists, else `None` |
+| `post_llm_call` | `on_post_llm_call(**kwargs) -> None` | Re-dispatches the reviewer after the owning session's main-agent turn ends while the pipeline is parked in a `*_waiting` phase; inert otherwise (no-op for subagent turns and other sessions' turns) |
 
 ## plugin.yaml
 

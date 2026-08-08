@@ -19,8 +19,9 @@ conventions, project structure, testing, workflows, and setup guides.
 
 v1.0.0 rearchitected Jovaltus from a skill-bundle approach into a
 **subagent-driven deterministic framework**. The plugin ships 4 tools whose
-handlers dispatch pipeline subagents via Hermes's `subagent_lifecycle` (resolved from the
-main-agent turn and cached for hook-driven continuation);
+handlers dispatch pipeline subagents via Hermes's `subagent_lifecycle`
+(resolved from the main-agent turn, cached per originating session, and
+re-attached to the pipeline's own session on hook-driven continuation);
 a state machine (`state.py`, persisted to `~/.hermes/jovaltus_state.json`)
 records every phase transition (cross-session resume); and 4 hooks
 (`subagent_start`, `subagent_stop`, `pre_llm_call`, `post_llm_call`)
@@ -270,9 +271,9 @@ jovaltus/
 │       ├── project-documentation/
 │       └── qa/
 ├── tests/
-│   ├── test_state.py        # 25 tests
-│   ├── test_tools.py        # 23 tests
-│   ├── test_hooks.py        # 23 tests
+│   ├── test_state.py        # 29 tests
+│   ├── test_tools.py        # 27 tests
+│   ├── test_hooks.py        # 35 tests
 │   ├── test_register.py     # 5 tests
 │   ├── test_git_utils.py    # 19 tests
 │   ├── test_sync.py         # 8 tests

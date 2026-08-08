@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v1.1.5 — 2026-08-09
+
+### Fixed
+- **Hook notifications are session-specific again.** Completion and
+  fix-request events are now addressed to the session that STARTED the
+  pipeline (`PipelineState.session_key` / `origin_ui_session_id`, captured
+  per-run on the main-turn dispatch and persisted on the run). Previously
+  the routing was a process-global snapshot, so with parallel main-agent
+  sessions in one gateway process, whichever session started a pipeline
+  last re-addressed every other pipeline's notifications — session B's chat
+  received session A's completions/fix-requests (and A never saw its own).
+- **Review/simplify subagents are visible in the desktop app again — and
+  their rows clear when they finish.** The parent-agent cache is keyed per
+  originating session instead of a single global slot, so hook-driven
+  re-dispatches (`post_llm_call` / `subagent_stop`) re-attach the reviewer
+  to the session that owns the pipeline. Its `subagent.start` /
+  `subagent.complete` events — which drive the desktop's subagent rows —
+  land in the right chat instead of whichever session dispatched last, and
+  completed rows clear instead of lingering as "running".
+- **Hooks gate on the owning session.** `subagent_start` / `subagent_stop`
+  require `parent_session_id == p.session_key` and `post_llm_call` requires
+  the turn's `session_id == p.session_key` when the pipeline carries a
+  session key, so one session's children/turns can never drive another
+  session's pipeline. Pipelines persisted without routing (legacy) stay
+  ungated and keep working.
+
+---
+
 ## v1.1.4 — 2026-08-08
 
 ### Fixed

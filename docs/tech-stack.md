@@ -5,7 +5,7 @@
 | Python | >=3.10 | Runtime | Plugin host language |
 | fabricium | >=0.1.1 | Framework | Hermes plugin SDK — `HermesPlugin`, `git_utils`, `state` |
 | hatchling | (build-system) | Build | PEP 621 wheel builder |
-| pytest | >=8 | Testing | Test framework, 102 tests |
+| pytest | >=8 | Testing | Test framework, 143 tests |
 | ruff | >=0.8 | Lint/Format | Linting + auto-formatting |
 | mypy | >=1.16 | Type Check | Strict type checking (`--strict`, zero errors) |
 | pre-commit | (hooks) | CI/CD | Git hooks: ruff check → mypy → ruff format |
@@ -21,9 +21,10 @@
 The plugin is built entirely on Hermes APIs available in the runtime:
 `ctx.register_tool` / `ctx.register_hook` / `ctx.subagent_lifecycle.launch`
 (dispatch pipeline subagents; the parent is resolved from the main-agent
-turn and cached for hook-driven continuation) and the `subagent_start` /
-`subagent_stop` / `pre_llm_call` hooks. No new dependencies beyond
-`fabricium>=0.1.1`.
+turn, cached per originating session, and re-attached to the pipeline's
+own session on hook-driven continuation) and the `subagent_start` /
+`subagent_stop` / `pre_llm_call` / `post_llm_call` hooks. No new
+dependencies beyond `fabricium>=0.1.1`.
 
 ## Behavioral Verification (no eval harness)
 

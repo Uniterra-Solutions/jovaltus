@@ -30,7 +30,7 @@ deterministic pipeline whose phases advance automatically via the
 Call the `plan` tool with `user_requirements` (required string). It
 computes the run dir `<repo_root>/.plan/<YYYYmmdd>/<plan_name>/` and dispatches
 subagents in sequence: prd → research → acceptance → tasks
-(`src/jovaltus/tools.py:57-67`). Each subagent writes its artifact into the
+(`src/jovaltus/tools.py:163-171`). Each subagent writes its artifact into the
 run dir:
 
 ```
@@ -42,7 +42,7 @@ run dir:
 ```
 
 When the chain finishes, `status_text` reports
-`plan complete: <run_dir>/tasks.md` (`src/jovaltus/state.py:227-228`) and
+`plan complete: <run_dir>/tasks.md` (`src/jovaltus/state.py:279-292`) and
 `pre_llm_call` injects that line into the next turn.
 
 ### 2. `execute` — implement the DAG
@@ -53,7 +53,7 @@ must have `delegation.max_spawn_depth >= 2` (the execute orchestrator is a
 depth-1 child that spawns its own workers). The handler checks the
 effective value and returns
 `{"status":"error","message":"execute requires delegation.max_spawn_depth >= 2"}`
-otherwise (`src/jovaltus/tools.py:395-407`, `519-569`). `hermes jovaltus
+otherwise (`src/jovaltus/tools.py:428-443`, `562-571`). `hermes jovaltus
 setup` and `hermes jovaltus update` auto-configure the floor for installed
 profiles (`src/jovaltus/setup_config.py`), so the manual step below is only
 needed for profiles outside the plugin's setup/update flow:
@@ -76,7 +76,7 @@ simplification-review subagent; if the reviewer writes
 `simplify_waiting` and **you (the main agent) apply the suggestions**
 — no fixer subagent is dispatched. When your fixing turn ends, the
 `post_llm_call` hook re-dispatches the reviewer automatically. Loop until
-the verdict is `"pass"` (no iteration cap — `src/jovaltus/hooks.py:146-188`).
+the verdict is `"pass"` (no iteration cap — `src/jovaltus/hooks.py:167-206`).
 
 ### 4. `review` — adversarially review the changes
 
@@ -90,22 +90,23 @@ re-dispatches the reviewer.
 
 - Every dispatched child's goal carries the marker
   `[jovaltus-pipeline:<tool>:<phase>]`; `subagent_start` associates the
-  child with the pipeline (`src/jovaltus/hooks.py:44-64`).
+  child with the pipeline (`src/jovaltus/hooks.py:49-77`).
 - `subagent_stop` advances the chain when the active child completes
-  (`src/jovaltus/hooks.py:67-90`). A `"fix"` verdict parks the pipeline and
+  (`src/jovaltus/hooks.py:79-106`). A `"fix"` verdict parks the pipeline and
   pushes a fix-request event (`_push_fix_request_event`,
-  `src/jovaltus/hooks.py:287-305`) that wakes you with the findings.
+  `src/jovaltus/hooks.py:303-320`) that wakes you with the findings.
 - `pre_llm_call` injects a status line each turn while a pipeline exists
-  (`src/jovaltus/hooks.py:93-106`), so you always see the current
+  (`src/jovaltus/hooks.py:108-122`), so you always see the current
   tool/phase/status/run_dir.
 - `post_llm_call` re-dispatches the reviewer after your fixing turn ends
-  (`src/jovaltus/hooks.py:109-143`). It is a no-op unless the pipeline is
-  parked in `*_waiting`, so it does not fire outside the loop.
+  (`src/jovaltus/hooks.py:124-165`). It is a no-op unless the pipeline is
+  parked in `*_waiting` and the turn belongs to the owning session, so it
+  does not fire outside the loop.
 
 ## Running Tests During Development
 
 ```bash
-# Full suite (102 tests)
+# Full suite (143 tests)
 uv run pytest -v
 
 # Unit tests only (no integration)
