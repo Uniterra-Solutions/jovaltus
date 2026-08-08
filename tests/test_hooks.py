@@ -58,8 +58,9 @@ class FakeCtx:
 @pytest.fixture
 def fake_ctx(fake_home: Path, monkeypatch: pytest.MonkeyPatch) -> FakeCtx:
     ctx = FakeCtx()
-    # tools.py dispatches via _get_lifecycle() (module-level) — wire the fake.
-    monkeypatch.setattr(tools, "_get_lifecycle", lambda: ctx.subagent_lifecycle)
+    # tools.py dispatches via _get_lifecycle(session_key) (module-level) —
+    # wire the fake, ignoring the per-session key argument.
+    monkeypatch.setattr(tools, "_get_lifecycle", lambda *_: ctx.subagent_lifecycle)
     # Avoid importing Hermes internals (agent package) in unit tests.
     monkeypatch.setattr(
         tools,
@@ -167,6 +168,44 @@ def test_on_subagent_start_non_matching_goal_is_noop(
     assert p.active_child_session_id is None
 
 
+def test_on_subagent_start_gates_on_owning_session(
+    fake_ctx: FakeCtx, fake_home: Path
+) -> None:
+    """A pipeline pinned to a session ignores children of other sessions.
+
+    Regression for the parallel-session leak: with session B's pipeline in
+    the shared state, B's children must never associate with (or advance)
+    session A's pipeline — the hook matches on BOTH the goal marker and the
+    spawning parent's session.
+    """
+    jstate.start_pipeline(
+        "plan",
+        "/tmp/run-a",
+        user_requirements="req",
+        session_key="sess-a",
+    )
+    # A child spawned by a DIFFERENT session with the same marker shape is
+    # not accepted (it belongs to that session's pipeline).
+    hooks.on_subagent_start(
+        parent_session_id="sess-b",
+        child_session_id="b-child",
+        child_goal=_marker_goal("plan", "prd"),
+    )
+    p = jstate.get_pipeline()
+    assert p is not None
+    assert p.active_child_session_id is None
+
+    # The owning session's own child IS accepted.
+    hooks.on_subagent_start(
+        parent_session_id="sess-a",
+        child_session_id="a-child",
+        child_goal=_marker_goal("plan", "prd"),
+    )
+    p = jstate.get_pipeline()
+    assert p is not None
+    assert p.active_child_session_id == "a-child"
+
+
 # ── subagent_stop: plan chain ----------------------------------------------
 
 
@@ -236,6 +275,53 @@ def test_on_subagent_stop_non_matching_id_is_noop(
     assert p.phase == "prd"
     assert p.active_child_session_id == "active-1"
     assert fake_ctx.subagent_lifecycle.launches == []
+
+
+def test_on_subagent_stop_gates_on_owning_session(
+    fake_ctx: FakeCtx, fake_home: Path
+) -> None:
+    """A completing child from another session never advances THIS pipeline.
+
+    Regression for the parallel-session leak: session B's pipeline state
+    must not be advanced by session A's child completion (and vice versa)
+    when both run in the same gateway process.
+    """
+    jstate.start_pipeline(
+        "plan",
+        "/tmp/run-a",
+        user_requirements="req",
+        session_key="sess-a",
+    )
+    hooks.on_subagent_start(
+        parent_session_id="sess-a",
+        child_session_id="a-child",
+        child_goal=_marker_goal("plan", "prd"),
+    )
+
+    # A child completing under a DIFFERENT session's parent is ignored.
+    hooks.on_subagent_stop(
+        parent_session_id="sess-b",
+        child_session_id="a-child",
+        child_status="success",
+        child_summary="ok",
+    )
+    p = jstate.get_pipeline()
+    assert p is not None
+    assert p.phase == "prd"
+    assert p.active_child_session_id == "a-child"
+    assert fake_ctx.subagent_lifecycle.launches == []
+
+    # The owning session's child completion advances normally.
+    hooks.on_subagent_stop(
+        parent_session_id="sess-a",
+        child_session_id="a-child",
+        child_status="success",
+        child_summary="ok",
+    )
+    p = jstate.get_pipeline()
+    assert p is not None
+    assert p.phase == "research"
+    assert fake_ctx.subagent_lifecycle.launches  # next phase dispatched
 
 
 def test_on_subagent_stop_failure_finishes_failed(
@@ -423,6 +509,53 @@ def test_post_llm_call_noop_on_subagent_turn(
     assert fake_ctx.subagent_lifecycle.launches == []
 
 
+def test_post_llm_call_noop_for_other_session(
+    fake_ctx: FakeCtx, fake_home: Path, tmp_path: Path
+) -> None:
+    """Another session's turn must not re-dispatch THIS session's reviewer.
+
+    Regression for the parallel-session interference: with A's pipeline
+    parked in review_waiting, a turn completed by session B's main agent
+    must leave A's pipeline alone — otherwise A's reviewer gets launched
+    under B's parent and its desktop rows land in B's chat.
+    """
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _verdict(run_dir, "fix")
+    jstate.start_pipeline(
+        "review",
+        str(run_dir),
+        plan_path=str(run_dir / "tasks.md"),
+        session_key="sess-a",
+    )
+    hooks.on_subagent_start(
+        parent_session_id="sess-a",
+        child_session_id="child-1",
+        child_goal=_marker_goal("review", "review"),
+    )
+    hooks.on_subagent_stop(
+        parent_session_id="sess-a",
+        child_session_id="child-1",
+        child_status="success",
+        child_summary="ok",
+    )
+    p = jstate.get_pipeline()
+    assert p is not None and p.phase == "review_waiting"
+
+    hooks.on_post_llm_call(platform="desktop", session_id="sess-b")
+    p = jstate.get_pipeline()
+    assert p is not None
+    assert p.phase == "review_waiting"  # B's turn must not re-dispatch
+    assert fake_ctx.subagent_lifecycle.launches == []
+
+    # The owning session's own turn re-dispatches the reviewer.
+    hooks.on_post_llm_call(platform="desktop", session_id="sess-a")
+    p = jstate.get_pipeline()
+    assert p is not None
+    assert p.phase == "review"
+    assert "[jovaltus-pipeline:review:review]" in _last_goal(fake_ctx)
+
+
 def test_post_llm_call_noop_when_pipeline_done(
     fake_ctx: FakeCtx, fake_home: Path, tmp_path: Path
 ) -> None:
@@ -551,12 +684,16 @@ def test_hooks_are_resilient_to_state_errors(
 
 def test_build_completion_event_done_shape(fake_ctx: FakeCtx, fake_home: Path) -> None:
     """A successful terminal state builds a completion event with routing."""
-    jstate.start_pipeline("plan", "/abs/run", user_requirements="req")
+    jstate.start_pipeline(
+        "plan",
+        "/abs/run",
+        user_requirements="req",
+        session_key="sess-1",
+        origin_ui_session_id="ui-9",
+    )
     p = jstate.get_pipeline()
     assert p is not None
-    evt = hooks._build_completion_event(
-        p, True, {"session_key": "sess-1", "origin_ui_session_id": "ui-9"}
-    )
+    evt = hooks._build_completion_event(p, True)
     assert evt["type"] == "completion"
     assert evt["session_id"] == "jovaltus-plan-run"
     assert evt["command"] == "jovaltus plan"
@@ -574,13 +711,47 @@ def test_build_completion_event_failed_shape(
     jstate.start_pipeline("execute", "/abs/run", plan_path="/abs/run/tasks.md")
     p = jstate.get_pipeline()
     assert p is not None
-    evt = hooks._build_completion_event(p, False, {})
+    evt = hooks._build_completion_event(p, False)
     assert evt["type"] == "completion"
     assert evt["command"] == "jovaltus execute"
     assert evt["exit_code"] == 1
     assert evt["completion_reason"] == "failed"
     assert "session_key" not in evt
     assert "origin_ui_session_id" not in evt
+
+
+def test_completion_event_keeps_its_own_session_routing(
+    fake_ctx: FakeCtx, fake_home: Path
+) -> None:
+    """A pipeline's event is addressed to ITS session, never a later run's.
+
+    Regression for the parallel-session notification leak: session B
+    starting its own pipeline must not re-address session A's completion.
+    The routing rides on the pipeline (persisted at start), not on any
+    process-global snapshot.
+    """
+    jstate.start_pipeline(
+        "plan",
+        "/abs/run-a",
+        user_requirements="req",
+        session_key="sess-a",
+        origin_ui_session_id="ui-a",
+    )
+    p = jstate.get_pipeline()
+    assert p is not None
+    # Another session starts a pipeline afterwards (clobbers the shared
+    # state file — but the OLD run's routing was already captured).
+    jstate.start_pipeline(
+        "review",
+        "/abs/run-b",
+        plan_path="/abs/run-b/tasks.md",
+        session_key="sess-b",
+        origin_ui_session_id="ui-b",
+    )
+
+    evt = hooks._build_completion_event(p, True)
+    assert evt["session_key"] == "sess-a"
+    assert evt["origin_ui_session_id"] == "ui-a"
 
 
 def test_fix_request_event_shape_and_dedup_key(
@@ -598,14 +769,18 @@ def test_fix_request_event_shape_and_dedup_key(
         json.dumps({"verdict": "fix", "findings": "T1: bug\nT2: hole"}),
         encoding="utf-8",
     )
-    jstate.start_pipeline("review", str(run_dir), plan_path=str(run_dir / "tasks.md"))
+    jstate.start_pipeline(
+        "review",
+        str(run_dir),
+        plan_path=str(run_dir / "tasks.md"),
+        session_key="sess-1",
+        origin_ui_session_id="ui-9",
+    )
     p = jstate.get_pipeline()
     assert p is not None
     p.loop_iteration = 3
 
-    evt = hooks._build_fix_request_event(
-        p, {"session_key": "sess-1", "origin_ui_session_id": "ui-9"}
-    )
+    evt = hooks._build_fix_request_event(p)
     assert evt["type"] == "completion"
     assert evt["session_id"] == "jovaltus-review-run-fix-3"
     assert evt["command"] == "jovaltus review"

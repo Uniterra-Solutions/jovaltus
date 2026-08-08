@@ -70,8 +70,9 @@ class FakeCtx:
 @pytest.fixture
 def fake_ctx(fake_home: Path, monkeypatch: pytest.MonkeyPatch) -> FakeCtx:
     ctx = FakeCtx()
-    # tools.py dispatches via _get_lifecycle() (module-level) — wire the fake.
-    monkeypatch.setattr(tools, "_get_lifecycle", lambda: ctx.subagent_lifecycle)
+    # tools.py dispatches via _get_lifecycle(session_key) (module-level) —
+    # wire the fake, ignoring the per-session key argument.
+    monkeypatch.setattr(tools, "_get_lifecycle", lambda *_: ctx.subagent_lifecycle)
     # Avoid importing Hermes internals (agent package) in unit tests.
     monkeypatch.setattr(
         tools,
@@ -435,36 +436,117 @@ def test_handler_signatures_accept_args_only() -> None:
 # ── completion-notification routing capture -----------------------------------
 
 
+class FakeParent:
+    """Stub of the host parent agent: exposes a session identity."""
+
+    def __init__(self, session_id: str) -> None:
+        self.session_id = session_id
+
+
 def test_capture_routing_snapshots_session(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A main-turn dispatch captures the originating session for notifications."""
-
-    class FakeParent:
-        session_id = "sess-abc"
-
-    monkeypatch.setattr(tools, "_live_parent", lambda: FakeParent())
+    """A main-turn capture returns the originating session's routing keys."""
+    monkeypatch.setattr(tools, "_live_parent", lambda: FakeParent("sess-abc"))
     monkeypatch.setenv("HERMES_UI_SESSION_ID", "ui-9")
-    routing: dict[str, str] = {"session_key": "", "origin_ui_session_id": ""}
-    monkeypatch.setattr(tools, "_ROUTING", routing)
 
-    tools._capture_routing()
+    routing = tools._capture_routing()
 
     assert routing == {"session_key": "sess-abc", "origin_ui_session_id": "ui-9"}
 
 
-def test_capture_routing_skips_daemon_thread(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Off-turn (hook) dispatches must not overwrite the main-turn snapshot.
+def test_capture_routing_records_parent_per_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Captures index the parent by session so hook dispatches resolve it.
 
-    Hook callbacks run on child daemon threads where the contextvar parent is
-    not visible; if they clobbered _ROUTING with empty values the completion
-    notification would lose its routing and fail closed.
+    Two sessions dispatching in sequence must BOTH stay resolvable — the
+    second capture must not evict the first (the old single-slot cache
+    caused session A's hook-driven re-dispatches to attach to session B).
     """
-    monkeypatch.setattr(tools, "_live_parent", lambda: None)
-    routing: dict[str, str] = {
-        "session_key": "sess-keep",
-        "origin_ui_session_id": "ui-keep",
-    }
-    monkeypatch.setattr(tools, "_ROUTING", routing)
-
+    monkeypatch.setattr(
+        tools,
+        "_live_parent",
+        lambda: FakeParent("sess-a"),
+    )
+    tools._capture_routing()
+    # A second session dispatches later — must not clobber A's entry.
+    monkeypatch.setattr(tools, "_live_parent", lambda: FakeParent("sess-b"))
     tools._capture_routing()
 
-    assert routing == {"session_key": "sess-keep", "origin_ui_session_id": "ui-keep"}
+    assert "sess-a" in tools._PARENT_AGENTS
+    assert "sess-b" in tools._PARENT_AGENTS
+    assert tools._PARENT_AGENTS["sess-a"].session_id == "sess-a"
+    assert tools._PARENT_AGENTS["sess-b"].session_id == "sess-b"
+
+
+def test_capture_routing_returns_empty_on_daemon_thread(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Off-turn (hook) captures return empty routing, never stale keys.
+
+    Hook callbacks run on child daemon threads where the contextvar parent
+    is not visible; an empty result means the pipeline keeps its own
+    persisted routing (captured at start) instead of being re-addressed.
+    """
+    monkeypatch.setattr(tools, "_live_parent", lambda: None)
+    monkeypatch.setenv("HERMES_UI_SESSION_ID", "ui-keep")
+
+    assert tools._capture_routing() == {
+        "session_key": "",
+        "origin_ui_session_id": "",
+    }
+
+
+def test_get_parent_agent_resolves_by_pipeline_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Hook dispatches re-attach to the pipeline's OWN session, not the last.
+
+    On a daemon thread the contextvar parent is invisible; the resolver must
+    return the cached agent for the pipeline's session_key even when another
+    session dispatched later (the desktop-subagent-visibility bug: A's
+    reviewer was launched under B's parent, so its progress events — and the
+    desktop rows they drive — landed in B's chat).
+    """
+    parent_a = FakeParent("sess-a")
+    parent_b = FakeParent("sess-b")
+    tools._PARENT_AGENTS.update({"sess-a": parent_a, "sess-b": parent_b})
+    monkeypatch.setattr(tools, "_live_parent", lambda: None)  # daemon thread
+
+    assert tools._get_parent_agent("sess-a") is parent_a
+    assert tools._get_parent_agent("sess-b") is parent_b
+
+
+def test_get_parent_agent_prefers_live_parent_and_records(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A main-turn dispatch returns the live parent and refreshes the cache."""
+    live = FakeParent("sess-live")
+    monkeypatch.setattr(tools, "_live_parent", lambda: live)
+
+    assert tools._get_parent_agent("") is live
+    assert tools._PARENT_AGENTS["sess-live"] is live
+
+
+def test_handlers_persist_routing_onto_pipeline(
+    fake_ctx: FakeCtx, fake_home: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Each run carries ITS OWN session routing, independent of other runs.
+
+    A pipeline started by session A keeps A's keys even after session B
+    starts its own pipeline (the global-snapshot bug: B's start clobbered
+    A's routing, so A's completion events were addressed to B).
+    """
+    monkeypatch.setattr(tools, "_live_parent", lambda: FakeParent("sess-a"))
+    plan = _plan_path(tmp_path)
+    json.loads(tools.review_handler({"plan": str(plan)}))
+    p = jstate.get_pipeline()
+    assert p is not None
+    assert p.session_key == "sess-a"
+
+    # Session B starts its own pipeline later — A's persisted routing must
+    # be untouched (and the state now holds B's run, so re-check by capture).
+    monkeypatch.setattr(tools, "_live_parent", lambda: FakeParent("sess-b"))
+    json.loads(tools.review_handler({"plan": str(plan)}))
+    p = jstate.get_pipeline()
+    assert p is not None
+    assert p.session_key == "sess-b"
